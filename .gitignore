@@ -25,3 +25,6 @@ credentials/
 .idea/
 .vscode/
 *.log
+
+# Crawl cache (raw RPC responses, rebuilt by npm run crawl)
+.cache/

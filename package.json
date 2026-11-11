@@ -1,0 +1,12 @@
+{
+  "name": "track-record",
+  "private": true,
+  "workspaces": [
+    "offchain"
+  ],
+  "scripts": {
+    "crawl": "npm run crawl -w offchain",
+    "snapshot": "npm run snapshot -w offchain",
+    "test": "npm test -w offchain"
+  }
+}
