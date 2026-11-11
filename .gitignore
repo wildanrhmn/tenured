@@ -1,0 +1,27 @@
+# Private strategy notes, never published
+docs/
+
+# Rust
+target/
+**/target/
+
+# Node
+node_modules/
+.next/
+dist/
+.turbo/
+*.tsbuildinfo
+
+# Env and keys
+.env
+.env.*
+!.env.example
+*.pem
+credentials/
+.near-credentials/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+*.log
