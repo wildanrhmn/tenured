@@ -1,0 +1,173 @@
+{
+  "factory": "sputnik-dao.near",
+  "rules": {
+    "trusted_daos": ["alpha.sputnik-dao.near", "beta.sputnik-dao.near", "gamma.sputnik-dao.near"],
+    "tokens": [
+      { "token_id": "", "min_amount": "1000000000000000000000000" },
+      { "token_id": "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1", "min_amount": "10000000" }
+    ],
+    "min_distinct_daos": 2,
+    "min_payouts": 3
+  },
+  "static_cases": [
+    {
+      "name": "trusted factory DAO passes to the chain read",
+      "claims": [{ "dao_id": "alpha.sputnik-dao.near", "proposal_id": 4 }],
+      "expect": [null]
+    },
+    {
+      "name": "an account outside the factory is rejected even if listed",
+      "claims": [{ "dao_id": "alpha.near", "proposal_id": 1 }],
+      "expect": ["NotFactoryDao"]
+    },
+    {
+      "name": "a sub-account of a DAO is not a DAO",
+      "claims": [{ "dao_id": "x.alpha.sputnik-dao.near", "proposal_id": 1 }],
+      "expect": ["NotFactoryDao"]
+    },
+    {
+      "name": "a real DAO the funder doesn't trust counts for nothing",
+      "claims": [{ "dao_id": "ring.sputnik-dao.near", "proposal_id": 1 }],
+      "expect": ["NotTrusted"]
+    },
+    {
+      "name": "the same claim twice is counted once",
+      "claims": [
+        { "dao_id": "beta.sputnik-dao.near", "proposal_id": 7 },
+        { "dao_id": "beta.sputnik-dao.near", "proposal_id": 7 },
+        { "dao_id": "beta.sputnik-dao.near", "proposal_id": 8 }
+      ],
+      "expect": [null, "Duplicate", null]
+    }
+  ],
+  "proposal_cases": [
+    {
+      "name": "approved NEAR transfer above the floor",
+      "claimant": "dev.near",
+      "proposal": {
+        "id": 4, "proposer": "council.near", "description": "Q3 frontend work",
+        "kind": { "Transfer": { "token_id": "", "receiver_id": "dev.near", "amount": "5000000000000000000000000", "msg": null } },
+        "status": "Approved", "vote_counts": { "council": ["2", "0", "0"] }, "votes": {}, "submission_time": "1700000000000000000"
+      },
+      "expect": null
+    },
+    {
+      "name": "approved USDC transfer exactly at the floor",
+      "claimant": "dev.near",
+      "proposal": {
+        "id": 5, "proposer": "dev.near", "description": "invoice 12",
+        "kind": { "Transfer": { "token_id": "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1", "receiver_id": "dev.near", "amount": "10000000", "msg": null } },
+        "status": "Approved", "vote_counts": {}, "votes": {}, "submission_time": "1700000000000000000"
+      },
+      "expect": null
+    },
+    {
+      "name": "the DAO returned null (no such proposal)",
+      "claimant": "dev.near",
+      "proposal": null,
+      "expect": "NotFound"
+    },
+    {
+      "name": "a response without the fields we need",
+      "claimant": "dev.near",
+      "proposal": { "id": 9, "kind": "Vote" },
+      "expect": "Unreadable"
+    },
+    {
+      "name": "still being voted on",
+      "claimant": "dev.near",
+      "proposal": {
+        "id": 6, "proposer": "dev.near", "description": "",
+        "kind": { "Transfer": { "token_id": "", "receiver_id": "dev.near", "amount": "5000000000000000000000000", "msg": null } },
+        "status": "InProgress", "vote_counts": {}, "votes": {}, "submission_time": "1700000000000000000"
+      },
+      "expect": "NotApproved"
+    },
+    {
+      "name": "rejected by the council",
+      "claimant": "dev.near",
+      "proposal": {
+        "id": 7, "proposer": "dev.near", "description": "",
+        "kind": { "Transfer": { "token_id": "", "receiver_id": "dev.near", "amount": "5000000000000000000000000", "msg": null } },
+        "status": "Rejected", "vote_counts": {}, "votes": {}, "submission_time": "1700000000000000000"
+      },
+      "expect": "NotApproved"
+    },
+    {
+      "name": "an approved proposal that isn't a payout",
+      "claimant": "dev.near",
+      "proposal": {
+        "id": 8, "proposer": "council.near", "description": "add dev",
+        "kind": { "AddMemberToRole": { "member_id": "dev.near", "role": "council" } },
+        "status": "Approved", "vote_counts": {}, "votes": {}, "submission_time": "1700000000000000000"
+      },
+      "expect": "NotTransfer"
+    },
+    {
+      "name": "someone else's payout",
+      "claimant": "dev.near",
+      "proposal": {
+        "id": 10, "proposer": "council.near", "description": "",
+        "kind": { "Transfer": { "token_id": "", "receiver_id": "other.near", "amount": "5000000000000000000000000", "msg": null } },
+        "status": "Approved", "vote_counts": {}, "votes": {}, "submission_time": "1700000000000000000"
+      },
+      "expect": "WrongReceiver"
+    },
+    {
+      "name": "paid in a token the funder doesn't count",
+      "claimant": "dev.near",
+      "proposal": {
+        "id": 11, "proposer": "council.near", "description": "",
+        "kind": { "Transfer": { "token_id": "meme.tkn.near", "receiver_id": "dev.near", "amount": "999999999999999999999999999", "msg": null } },
+        "status": "Approved", "vote_counts": {}, "votes": {}, "submission_time": "1700000000000000000"
+      },
+      "expect": "TokenNotCounted"
+    },
+    {
+      "name": "a dust payout below the floor",
+      "claimant": "dev.near",
+      "proposal": {
+        "id": 12, "proposer": "council.near", "description": "",
+        "kind": { "Transfer": { "token_id": "", "receiver_id": "dev.near", "amount": "1", "msg": null } },
+        "status": "Approved", "vote_counts": {}, "votes": {}, "submission_time": "1700000000000000000"
+      },
+      "expect": "BelowFloor"
+    },
+    {
+      "name": "an amount that isn't a number",
+      "claimant": "dev.near",
+      "proposal": {
+        "id": 13, "proposer": "council.near", "description": "",
+        "kind": { "Transfer": { "token_id": "", "receiver_id": "dev.near", "amount": "lots", "msg": null } },
+        "status": "Approved", "vote_counts": {}, "votes": {}, "submission_time": "1700000000000000000"
+      },
+      "expect": "Unreadable"
+    }
+  ],
+  "summary_cases": [
+    {
+      "name": "nothing valid",
+      "valid": [],
+      "expect": { "distinct_daos": 0, "payouts": 0, "qualifies": false }
+    },
+    {
+      "name": "two DAOs, three payouts meets the bar",
+      "valid": [
+        { "dao_id": "alpha.sputnik-dao.near", "proposal_id": 1 },
+        { "dao_id": "alpha.sputnik-dao.near", "proposal_id": 2 },
+        { "dao_id": "beta.sputnik-dao.near", "proposal_id": 3 }
+      ],
+      "expect": { "distinct_daos": 2, "payouts": 3, "qualifies": true }
+    },
+    {
+      "name": "many payouts from one friendly DAO is not enough",
+      "valid": [
+        { "dao_id": "alpha.sputnik-dao.near", "proposal_id": 1 },
+        { "dao_id": "alpha.sputnik-dao.near", "proposal_id": 2 },
+        { "dao_id": "alpha.sputnik-dao.near", "proposal_id": 3 },
+        { "dao_id": "alpha.sputnik-dao.near", "proposal_id": 4 }
+      ],
+      "expect": { "distinct_daos": 1, "payouts": 4, "qualifies": false }
+    }
+  ]
+}

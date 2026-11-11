@@ -1,0 +1,10 @@
+[package]
+name = "track-record-rules"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Claim checks shared by the Track Record contracts (see RULES.md)"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
