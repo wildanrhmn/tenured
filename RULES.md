@@ -126,5 +126,5 @@ Off-chain data is **never trusted for money**. The contracts re-read every claim
 | Change the amount after registering | Sputnik proposals are immutable; the lane checks the exact amount |
 | Many qualifying accounts drain the lane | `period_budget` per period, debited before the call |
 | A colluding member of a trusted DAO | Bounded by `per_account_cap`, `period_budget` and the veto window |
-| A bug makes the lane approve other proposals | It only votes on IDs it created; tested; no full-access key |
+| A bug makes the lane approve other proposals | It only votes on proposals registered and checked field by field; tested; no full-access key |
 | Stale or forged off-chain data | The contracts re-read every claim on-chain |
