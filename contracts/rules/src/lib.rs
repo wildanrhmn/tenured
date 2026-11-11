@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// A pointer to one past proposal, presented by the contributor.
+#[cfg_attr(feature = "near", derive(near_sdk::borsh::BorshSerialize, near_sdk::borsh::BorshDeserialize))]
+#[cfg_attr(feature = "near", borsh(crate = "near_sdk::borsh"))]
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Claim {
     pub dao_id: String,
@@ -17,6 +19,8 @@ pub struct Claim {
 /// A payout token that counts, and the smallest amount that counts.
 /// `token_id` is `""` for native NEAR. Amounts are decimal strings in the
 /// token's smallest unit, as Sputnik stores them.
+#[cfg_attr(feature = "near", derive(near_sdk::borsh::BorshSerialize, near_sdk::borsh::BorshDeserialize))]
+#[cfg_attr(feature = "near", borsh(crate = "near_sdk::borsh"))]
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct TokenFloor {
     pub token_id: String,
@@ -24,6 +28,8 @@ pub struct TokenFloor {
 }
 
 /// What a funding DAO accepts as a track record.
+#[cfg_attr(feature = "near", derive(near_sdk::borsh::BorshSerialize, near_sdk::borsh::BorshDeserialize))]
+#[cfg_attr(feature = "near", borsh(crate = "near_sdk::borsh"))]
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Rules {
     pub trusted_daos: Vec<String>,
@@ -140,6 +146,8 @@ pub fn check_proposal(raw: Option<&Value>, claimant: &str, rules: &Rules) -> Res
     Ok(())
 }
 
+#[cfg_attr(feature = "near", derive(near_sdk::borsh::BorshSerialize, near_sdk::borsh::BorshDeserialize))]
+#[cfg_attr(feature = "near", borsh(crate = "near_sdk::borsh"))]
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Summary {
     pub distinct_daos: u32,
@@ -158,6 +166,74 @@ pub fn summarize(valid: &[&Claim], rules: &Rules) -> Summary {
         distinct_daos,
         payouts,
         qualifies: distinct_daos >= rules.min_distinct_daos && payouts >= rules.min_payouts,
+    }
+}
+
+/// Contract-side helpers shared by the verifier and the lane.
+#[cfg(feature = "near")]
+pub mod chain {
+    use super::*;
+    use near_sdk::{env, AccountId, Gas, NearToken, Promise};
+
+    /// Gas for one `get_proposal` read on a paying DAO.
+    pub const GAS_PER_READ: Gas = Gas::from_tgas(8);
+
+    /// Largest `get_proposal` response we read. Bounding it stops a hostile
+    /// DAO from burning the callback's gas with an enormous description.
+    pub const MAX_PROPOSAL_BYTES: usize = 64 * 1024;
+
+    /// Static rules plus "is this a valid account id", so a malformed name
+    /// can't make the cross-contract call panic.
+    pub fn pre_checks(claims: &[Claim], rules: &Rules, factory: &str) -> Vec<Option<Reject>> {
+        static_checks(claims, rules, factory)
+            .into_iter()
+            .zip(claims)
+            .map(|(verdict, c)| verdict.or_else(|| c.dao_id.parse::<AccountId>().err().map(|_| Reject::NotFactoryDao)))
+            .collect()
+    }
+
+    pub fn read_proposal(dao: AccountId, proposal_id: u64) -> Promise {
+        Promise::new(dao).function_call(
+            "get_proposal".to_string(),
+            serde_json::json!({ "id": proposal_id }).to_string().into_bytes(),
+            NearToken::from_yoctonear(0),
+            GAS_PER_READ,
+        )
+    }
+
+    /// One read per claim that passed `pre_checks`, in order.
+    pub fn read_claims(claims: &[Claim], statics: &[Option<Reject>]) -> Vec<Promise> {
+        claims
+            .iter()
+            .zip(statics)
+            .filter(|(_, verdict)| verdict.is_none())
+            .map(|(c, _)| read_proposal(c.dao_id.parse().expect("checked in pre_checks"), c.proposal_id))
+            .collect()
+    }
+
+    /// Results `first..first + n` of the joined reads. A failed call (for
+    /// example `ERR_NO_PROPOSAL`), an oversized response or an unparsable
+    /// body comes back as `None`.
+    pub fn read_results(first: u64, n: usize) -> Vec<Option<Value>> {
+        (first..first + n as u64)
+            .map(|i| {
+                env::promise_result_checked(i, MAX_PROPOSAL_BYTES)
+                    .ok()
+                    .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+            })
+            .collect()
+    }
+
+    /// Per-claim verdicts: static ones, then the proposals read for the rest.
+    pub fn verdicts(claimant: &str, statics: &[Option<Reject>], raws: &[Option<Value>], rules: &Rules) -> Vec<Option<Reject>> {
+        let mut raws = raws.iter();
+        statics
+            .iter()
+            .map(|verdict| match verdict {
+                Some(r) => Some(*r),
+                None => check_proposal(raws.next().and_then(|v| v.as_ref()), claimant, rules).err(),
+            })
+            .collect()
     }
 }
 
