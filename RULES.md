@@ -36,7 +36,7 @@ A record is permanent history, not a voucher. The same claims can qualify a cont
 
 The lane is a Sputnik **role member, never a treasury**. It holds no tokens, and money moves only from the DAO's own treasury through an ordinary approved `Transfer` proposal.
 
-**Install.** One `ChangePolicy` proposal adds a role `fastlane = Group([lane account])` with permissions `transfer:AddProposal` and `transfer:VoteApprove`, and a role vote policy of 1/1 `RoleWeight`. The DAO then sets the lane config:
+**Install.** One `ChangePolicy` proposal adds a role `fastlane = Group([lane account])` with the single permission `transfer:VoteApprove`, and a role vote policy of 1/1 `RoleWeight`. The lane can't file proposals; contributors file their own. The DAO then sets the lane config:
 
 | Field | Meaning |
 | --- | --- |
@@ -49,13 +49,24 @@ The lane is a Sputnik **role member, never a treasury**. It holds no tokens, and
 | `period_secs` | Length of a period; `period = floor(block_timestamp / period_secs)` |
 | `veto_secs` | How long a request waits before it can be approved. Must be shorter than the DAO's `proposal_period` |
 | `guardians` | Accounts that may veto a request alone |
+| `max_proposal_age_secs` | How old a proposal may be when registered, so a nearly expired proposal can't slip through |
 
-**Request.** Contributor `C` calls `request(amount, memo, claims, nonce)` and attaches exactly the DAO's `proposal_bond`.
+**Request.**
 
-1. The claims are verified (§1, §2).
-2. `amount <= per_account_cap - used(C, period)` and `amount <= period_budget - used(period)`. Both are **debited before** any cross-contract call.
-3. `(C, nonce)` must not have been used before, so retries don't double-request.
-4. The lane calls `add_proposal(Transfer { token_id: pay_token, receiver_id: C, amount })` on its DAO, forwarding the bond, and records the returned proposal ID as its own.
+1. Contributor `C` files an ordinary `Transfer` proposal in the DAO, from their own wallet, paying the DAO's normal bond. Sputnik handles the bond exactly as it does for any proposal.
+2. `C` calls `register(proposal_id, amount, claims, nonce)` on the lane.
+3. `(C, nonce)` must not have been used before, so retries don't double-register.
+4. `amount <= per_account_cap - used(C, period)` and `amount <= period_budget - used(period)`. Both are **debited before** any cross-contract call.
+5. The lane reads the proposal from its DAO and requires:
+   - `proposer == C` and `receiver_id == C`
+   - `token_id == pay_token`
+   - its amount equals `amount`
+   - status `InProgress`
+   - submitted within the last `max_proposal_age_secs`
+   - not registered before
+
+   **The lane only ever votes on proposals whose exact content it has checked this way.**
+6. The claims are verified (§1, §2) in the same call.
 
 **Veto window.** Until `veto_secs` have passed, either of these stops the request:
 
@@ -66,11 +77,11 @@ Sputnik only rejects on a threshold, which is why the lane has its own single-gu
 
 **Execute.** After the window, **anyone** may call `execute(request_id)`. The lane checks that the request wasn't vetoed and the proposal is still `InProgress`, then votes `VoteApprove`. Its 1/1 role threshold approves it, and Sputnik pays from the treasury.
 
-**Refunds.** If a request is vetoed, rejected, expires or fails, its amount is credited back to both limits. Sputnik returns the bond to the lane (the proposer), and the lane forwards it to `C`. On `Removed`, Sputnik keeps the bond.
+**Refunds.** If a registration fails its checks, or a request is vetoed, rejected or expires, its amount is credited back to both limits. Bonds never touch the lane: Sputnik returns them to `C` as the proposer, under its normal rules.
 
 **The lane never:**
-- votes on a proposal it did not create. Its `transfer:VoteApprove` permission would otherwise let it approve any transfer in the DAO, so this is tested explicitly.
-- holds funds beyond in-flight bonds.
+- votes on a proposal that wasn't registered and checked as above. Its `transfer:VoteApprove` permission would otherwise let it approve any transfer in the DAO, so this is tested explicitly.
+- holds funds.
 - has a full-access key after deployment.
 - changes its own config. Only the DAO can, through a proposal.
 
@@ -110,7 +121,9 @@ Off-chain data is **never trusted for money**. The contracts re-read every claim
 | Many payouts from one friendly trusted DAO | `min_distinct_daos` |
 | Present someone else's payouts | `receiver_id == C` (rule 5) |
 | Repeat the same claim in one request | Rule 8 |
-| Replay a request | `(C, nonce)` is single-use |
+| Replay a request | `(C, nonce)` is single-use, and each proposal can be registered once |
+| Register someone else's proposal, or one paying someone else | `proposer == receiver_id == C` |
+| Change the amount after registering | Sputnik proposals are immutable; the lane checks the exact amount |
 | Many qualifying accounts drain the lane | `period_budget` per period, debited before the call |
 | A colluding member of a trusted DAO | Bounded by `per_account_cap`, `period_budget` and the veto window |
 | A bug makes the lane approve other proposals | It only votes on IDs it created; tested; no full-access key |
