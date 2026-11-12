@@ -158,7 +158,16 @@ async function main() {
       await writeFile(path.join(BULK_DIR, `${id}.json`), JSON.stringify({ missing: true, kind }));
     }
   });
-  console.log(`crawl finished in ${((Date.now() - started) / 60000).toFixed(1)} min, ${failed} DAOs failed (rerun to retry them)`);
+  let gone = 0;
+  let retry = 0;
+  for (const f of await readdir(DAO_DIR)) {
+    const cached: CachedDao = JSON.parse(await readFile(path.join(DAO_DIR, f), "utf8"));
+    if (cached.error) cached.error_kind === "contract" ? gone++ : retry++;
+  }
+  console.log(
+    `crawl finished in ${((Date.now() - started) / 60000).toFixed(1)} min: ` +
+      `${gone} DAOs no longer run Sputnik, ${retry} failed on RPC${retry ? " (rerun to retry them)" : ""}`,
+  );
 }
 
 main().catch((e) => {

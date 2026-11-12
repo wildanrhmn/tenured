@@ -94,7 +94,10 @@ export class RpcPool {
     throw new ViewError(`gave up on ${accountId}.${method}: ${lastErr}`, "transport");
   }
 
-  // Code hash of any account; "11111111111111111111111111111111" means no contract.
+  // Hash of the code an account runs. Accounts on a NEP-591 global contract
+  // report an all-ones code_hash plus global_contract_hash (or the account
+  // that publishes it), so that is what we return for them.
+  // "11111111111111111111111111111111" means no contract at all.
   async codeHash(accountId: string): Promise<string> {
     const body = JSON.stringify({
       jsonrpc: "2.0",
@@ -114,7 +117,10 @@ export class RpcPool {
           continue;
         }
         const json = JSON.parse(text);
-        if (json?.result?.code_hash) return json.result.code_hash as string;
+        const r = json?.result;
+        if (r?.global_contract_hash) return r.global_contract_hash as string;
+        if (r?.global_contract_account_id) return `global:${r.global_contract_account_id}`;
+        if (r?.code_hash) return r.code_hash as string;
         if (/UNKNOWN_ACCOUNT|does not exist/i.test(text)) throw new ViewError(`no account ${accountId}`, "contract");
         lastErr = text.slice(0, 300);
       } catch (e) {
