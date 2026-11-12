@@ -9,6 +9,7 @@
     "snapshot": "npm run snapshot -w offchain",
     "test": "npm test -w offchain",
     "reproduce": "npm run reproduce -w offchain",
-    "cli": "npm run cli -w offchain --"
+    "cli": "npm run cli -w offchain --",
+    "judge": "npm run judge -w offchain --"
   }
 }
