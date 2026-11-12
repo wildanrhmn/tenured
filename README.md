@@ -48,10 +48,12 @@ You should see 7 checks marked `[ok]`, ending with `judge: 7 checks, 0 failed`:
 ### 2. Simulate the lane on a real mainnet DAO
 
 ```sh
-npm run cli -- simulate marketing.sputnik-dao.near --token near --cap 500 --budget 2000
+npm run cli -- simulate nearweek-news-contribution.sputnik-dao.near --token near --cap 500 --budget 2000
 ```
 
-You should see how many of that DAO's past payouts would have gone through the lane, the council votes saved, how many were stopped by the cap or the budget, and the most the lane would ever have moved in one 30-day period. The output is aggregate only.
+You should see that of the 4,907 NEAR payouts this DAO made to news contributors, **1,645 would have skipped a council vote (2,069 votes saved)**. You'll also see how many were stopped by the cap or the budget, and the most the lane would ever have moved in one 30-day period. The output is aggregate only.
+
+Grant DAOs come out lower: `open-web-academy` 37% of its NEAR payouts, `orderly-ops` 21%, `marketing` 4%. The lane helps most where the same people are paid again and again.
 
 ### 3. Verify a record live
 
