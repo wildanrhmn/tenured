@@ -109,7 +109,7 @@ echo "== 3. payout history for $DEV"
 if [ "$(last_id "$ALPHA")" = "0" ]; then
   for dao_amt in "$ALPHA:0.5" "$ALPHA:0.3" "$BETA:0.4"; do
     dao=${dao_amt%%:*}
-    amt=$(python3 -c "print(int(float('${dao_amt#*:}') * 10**24))")
+    amt=$(python3 -c "from decimal import Decimal; print(int(Decimal('${dao_amt#*:}') * 10**24))")
     kind=$(transfer_kind "$DEV" "$amt")
     id=$(propose "$dao" "$DEV" "$kind" "Contributor payout")
     approve "$dao" "$id" "$kind"
