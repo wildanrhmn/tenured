@@ -85,7 +85,7 @@ check("testnet: the lane's DAO and config", async () => {
   const dao = await rpc.view<string>(DEPLOYMENT.lane, "get_dao");
   if (dao !== DEPLOYMENT.fund) throw new Error(`lane serves ${dao}`);
   const c = await rpc.view<any>(DEPLOYMENT.lane, "get_config");
-  return `serves ${dao}; veto ${c.veto_secs}s; ${c.guardians.length} guardian(s); budget ${c.period_budget} yocto per ${c.period_secs / 86400} days`;
+  return `serves ${dao}; veto ${c.veto_secs}s; ${c.guardians.length} guardian(s); budget ${Number(BigInt(c.period_budget) / 10n ** 21n) / 1000} NEAR per ${c.period_secs / 86400} days`;
 });
 
 check("testnet: the contributor's record verifies against the DAOs", async () => {
