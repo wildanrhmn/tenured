@@ -10,6 +10,7 @@
     "test": "npm test -w offchain",
     "reproduce": "npm run reproduce -w offchain",
     "cli": "npm run cli -w offchain --",
-    "judge": "npm run judge -w offchain --"
+    "judge": "npm run judge -w offchain --",
+    "mcp": "npm run mcp -w offchain"
   }
 }
