@@ -12,7 +12,7 @@ export const MAINNET_RPCS = [
 
 export const TESTNET_RPCS = [
   "https://test.rpc.fastnear.com",
-  "https://rpc.testnet.near.org",
+  "https://near-testnet.drpc.org",
 ];
 
 type Endpoint = { url: string; benchedUntil: number };

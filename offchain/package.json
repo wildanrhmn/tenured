@@ -8,7 +8,8 @@
     "snapshot": "tsx src/snapshot.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "reproduce": "tsx src/report.ts"
+    "reproduce": "tsx src/report.ts",
+    "cli": "tsx src/cli.ts"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
