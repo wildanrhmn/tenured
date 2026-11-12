@@ -4,7 +4,7 @@
 
 A contributor who has already been paid for work by other DAOs can prove it to a new DAO. The new DAO's contract reads those DAOs' own proposals on-chain, so there is no oracle, no score server and no list to trust. A DAO can then let proven contributors' small payouts through a **fast lane**: a Sputnik role that approves them after a veto window, paid from the DAO's own treasury.
 
-Built at NEAR HACKATHON (November 2026). Track: `social` (Social Money), also `security`.
+Built at NEAR HACKATHON (November 2026). Tracks: `social` (Social Money), `security`, `agents`.
 
 ## The problem
 
@@ -103,6 +103,23 @@ Transactions from the demo run:
 | After the window: the lane votes, the DAO approves and pays 0.5 NEAR from its treasury | [`5jGnC3Ca…`](https://testnet.nearblocks.io/txns/5jGnC3CancppcG5WFvsuhA3r9nYpyZTTvbN1M3HCRbAt) |
 
 To run the whole thing yourself on testnet with free faucet accounts, read [`scripts/testnet-setup.sh`](scripts/testnet-setup.sh) and [`scripts/testnet-demo.sh`](scripts/testnet-demo.sh); `PREFIX=yourname` gives you your own copies.
+
+### 6. Use it from an AI agent (MCP)
+
+AI agents increasingly do paid work for DAOs. `offchain/src/mcp.ts` is an MCP server, so an agent can use its own track record. Add it to any MCP client:
+
+```json
+{ "mcpServers": { "track-record": { "command": "npm", "args": ["run", "-s", "mcp"], "cwd": "/path/to/this/repo" } } }
+```
+
+| Tool | What it does |
+| --- | --- |
+| `find_claims` | The best payouts an account can present, from the snapshot |
+| `verify_record` | Live verification with the contract's rules, plus each paying DAO's code version |
+| `simulate_dao` | The simulator (aggregates only) |
+| `plan_lane_request` | Scans the lane's trusted DAOs live for the account's payouts, verifies them, reads the DAO's bond, and returns the two transactions to sign (`add_proposal`, then `register`) with near CLI commands |
+
+The server never holds keys. The agent signs the plan with its own wallet, for example through [nearai/near-mcp](https://github.com/nearai/near-mcp). `npm test` includes a test that drives the server over stdio.
 
 ## How it works
 
