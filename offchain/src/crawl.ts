@@ -11,7 +11,7 @@ import { mkdir, readFile, writeFile, readdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { MAINNET_RPCS, RpcPool, ViewError } from "./rpc.js";
-import { MAINNET_FACTORY, type Policy, type Proposal } from "./sputnik.js";
+import { MAINNET_FACTORY, type ContractMetadata, type Policy, type Proposal } from "./sputnik.js";
 
 const ROOT = path.resolve(import.meta.dirname, "../..");
 export const CACHE = path.join(ROOT, ".cache/mainnet");
@@ -22,10 +22,14 @@ export const BULK_CONTRACT = "bulkpayment.near";
 export type CachedDao = {
   dao: string;
   crawled_at: string;
+  code_hash?: string;
   last_proposal_id: number;
   proposals: Proposal[];
   policy: Policy | null;
   error?: string;
+  // "contract": the account no longer answers like Sputnik (code removed or
+  // replaced); retrying won't help. "transport": RPC trouble; retried.
+  error_kind?: "contract" | "transport";
 };
 
 const PAGE = 100;
@@ -34,6 +38,7 @@ const CONCURRENCY = 4;
 async function crawlDao(rpc: RpcPool, dao: string): Promise<CachedDao> {
   const out: CachedDao = { dao, crawled_at: new Date().toISOString(), last_proposal_id: 0, proposals: [], policy: null };
   try {
+    out.code_hash = await rpc.codeHash(dao);
     out.last_proposal_id = (await rpc.view<number>(dao, "get_last_proposal_id")) ?? 0;
     for (let from = 0; from < out.last_proposal_id; from += PAGE) {
       const page = await rpc.view<Proposal[]>(dao, "get_proposals", { from_index: from, limit: PAGE });
@@ -42,6 +47,7 @@ async function crawlDao(rpc: RpcPool, dao: string): Promise<CachedDao> {
     if (out.last_proposal_id > 0) out.policy = await rpc.view<Policy>(dao, "get_policy");
   } catch (e) {
     out.error = (e as Error).message;
+    out.error_kind = e instanceof ViewError ? e.kind : "transport";
   }
   return out;
 }
@@ -87,12 +93,16 @@ async function main() {
 
   const daos = await rpc.view<string[]>(MAINNET_FACTORY, "get_dao_list");
   await writeFile(path.join(CACHE, "dao_list.json"), JSON.stringify(daos));
+  const versions = await rpc.view<ContractMetadata[]>(MAINNET_FACTORY, "get_contracts_metadata");
+  await writeFile(path.join(CACHE, "factory_versions.json"), JSON.stringify(versions));
   const todo = [];
   for (const dao of daos) {
     const file = path.join(DAO_DIR, `${dao}.json`);
     if (!refresh && existsSync(file)) {
       const cached: CachedDao = JSON.parse(await readFile(file, "utf8"));
-      if (!cached.error) continue;
+      // Contract-level failures are permanent (the account no longer runs
+      // Sputnik); only transport failures are worth another try.
+      if (!cached.error || cached.error_kind === "contract") continue;
     }
     todo.push(dao);
   }
@@ -111,7 +121,26 @@ async function main() {
     }
   });
 
-  // Second pass: resolve Trezu bulk payment lists referenced by approved proposals.
+  // Code hashes for DAOs cached before we recorded them: one cheap
+  // view_account each, no need to re-read their proposals.
+  const missingHash: string[] = [];
+  for (const f of await readdir(DAO_DIR)) {
+    const cached: CachedDao = JSON.parse(await readFile(path.join(DAO_DIR, f), "utf8"));
+    if (!cached.code_hash) missingHash.push(f);
+  }
+  if (missingHash.length) console.log(`${missingHash.length} DAOs need a code hash`);
+  await pool(missingHash, CONCURRENCY, async (f) => {
+    const file = path.join(DAO_DIR, f);
+    const cached: CachedDao = JSON.parse(await readFile(file, "utf8"));
+    try {
+      cached.code_hash = await rpc.codeHash(cached.dao);
+      await writeFile(file, JSON.stringify(cached));
+    } catch {
+      // left for the next run
+    }
+  });
+
+  // Resolve Trezu bulk payment lists referenced by approved proposals.
   const listIds = new Set<string>();
   for (const f of await readdir(DAO_DIR)) {
     const cached: CachedDao = JSON.parse(await readFile(path.join(DAO_DIR, f), "utf8"));

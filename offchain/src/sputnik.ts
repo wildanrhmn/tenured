@@ -61,3 +61,8 @@ export function isFactoryDao(daoId: string, factory: string): boolean {
   const name = daoId.slice(0, -(factory.length + 1));
   return name.length > 0 && !name.includes(".");
 }
+
+export const NO_CODE_HASH = "11111111111111111111111111111111";
+
+/// Code versions the factory publishes: [code_hash, { version, commit_id }].
+export type ContractMetadata = [string, { version: [number, number]; commit_id: string; changelog_url: string | null }];

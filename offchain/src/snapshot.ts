@@ -10,7 +10,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { gzipSync, gunzipSync } from "node:zlib";
 import path from "node:path";
 import { extractPayouts, type BulkList, type Opaque, type Payout } from "./payouts.js";
-import { MAINNET_FACTORY, type Policy } from "./sputnik.js";
+import { MAINNET_FACTORY, NO_CODE_HASH, type ContractMetadata, type Policy } from "./sputnik.js";
 import type { CachedDao } from "./crawl.js";
 
 const ROOT = path.resolve(import.meta.dirname, "../..");
@@ -20,6 +20,10 @@ export const SNAPSHOT = path.join(ROOT, "data/mainnet/snapshot.json.gz");
 export type DaoInfo = {
   dao: string;
   proposals: number;
+  code_hash: string | null;
+  // Sputnik version if the code is one the factory published, "none" if the
+  // account has no contract, null if it runs something else.
+  code_version: string | null;
   proposal_bond: string | null;
   proposal_period_ns: string | null;
   // Members of Group roles, by role name. Used to spot self-dealing.
@@ -33,6 +37,7 @@ export type Snapshot = {
   factory: string;
   crawled_from: string;
   crawled_to: string;
+  factory_versions: { code_hash: string; version: string; commit_id: string }[];
   daos: DaoInfo[];
   payouts: Payout[];
   opaque: Opaque[];
@@ -62,12 +67,17 @@ async function main() {
     return bulkCache.get(id);
   };
 
+  const meta: ContractMetadata[] = JSON.parse(await readFile(path.join(CACHE, "factory_versions.json"), "utf8"));
+  const factory_versions = meta.map(([code_hash, m]) => ({ code_hash, version: m.version.join("."), commit_id: m.commit_id }));
+  const versionOf = new Map(factory_versions.map((v) => [v.code_hash, v.version]));
+
   const snap: Snapshot = {
     version: 1,
     network: "mainnet",
     factory: MAINNET_FACTORY,
     crawled_from: "",
     crawled_to: "",
+    factory_versions,
     daos: [],
     payouts: [],
     opaque: [],
@@ -79,6 +89,8 @@ async function main() {
     snap.daos.push({
       dao: d.dao,
       proposals: d.last_proposal_id,
+      code_hash: d.code_hash ?? null,
+      code_version: !d.code_hash ? null : d.code_hash === NO_CODE_HASH ? "none" : (versionOf.get(d.code_hash) ?? null),
       proposal_bond: d.policy?.proposal_bond ?? null,
       proposal_period_ns: d.policy?.proposal_period ?? null,
       groups: groups(d.policy),

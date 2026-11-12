@@ -12,7 +12,7 @@ import { MAINNET_RPCS, TESTNET_RPCS, RpcPool, ViewError } from "./rpc.js";
 import { checkProposal, staticChecks, summarize, type Claim, type Rules } from "./rules.js";
 import { discoverClaims, simulate, suggestTrusted, type SimConfig } from "./simulate.js";
 import { loadSnapshot } from "./snapshot.js";
-import { MAINNET_FACTORY, TESTNET_FACTORY } from "./sputnik.js";
+import { MAINNET_FACTORY, NO_CODE_HASH, TESTNET_FACTORY, type ContractMetadata } from "./sputnik.js";
 
 // Common payout tokens on mainnet, so flags can use short names.
 export const TOKENS: Record<string, { id: string; decimals: number }> = {
@@ -135,11 +135,30 @@ async function cmdVerify(pos: string[], f: Flags) {
     results.push({ ...c, ok: reason === null, reason });
   }
   const s = summarize(results.filter((r) => r.ok), rules);
-  out(f, { account_id: account, results, summary: s }, () =>
+
+  // RULES.md §8: contracts can't see code hashes, so the CLI checks that each
+  // paying DAO still runs a Sputnik version its factory published.
+  const published = new Map(
+    (await rpc.view<ContractMetadata[]>(factory, "get_contracts_metadata").catch(() => [] as ContractMetadata[])).map(
+      ([hash, m]) => [hash, m.version.join(".")],
+    ),
+  );
+  const code: Record<string, string> = {};
+  for (const dao of new Set(results.filter((r) => r.ok).map((r) => r.dao_id))) {
+    const hash = await rpc.codeHash(dao);
+    code[dao] = hash === NO_CODE_HASH ? "none" : (published.get(hash) ?? "custom");
+  }
+  const warnings = Object.entries(code)
+    .filter(([, v]) => v === "none" || v === "custom")
+    .map(([dao, v]) => `${dao} runs ${v === "none" ? "no contract" : "code its factory never published"}; trust it with care (RULES.md §8)`);
+
+  out(f, { account_id: account, results, summary: s, code_versions: code, warnings }, () =>
     [
       `${account} on ${testnet ? "testnet" : "mainnet"}, read live from each DAO:`,
       ...results.map((r) => `  ${r.ok ? "ok " : "no "} ${r.dao_id}#${r.proposal_id}${r.reason ? `  (${r.reason})` : ""}`),
       `${s.payouts} valid payouts from ${s.distinct_daos} DAOs: ${s.qualifies ? "qualifies" : "does not qualify"}`,
+      ...Object.entries(code).map(([dao, v]) => `  code: ${dao} = ${published.size ? `Sputnik ${v}` : v}`),
+      ...warnings.map((w) => `warning: ${w}`),
     ].join("\n"),
   );
 }

@@ -94,6 +94,39 @@ export class RpcPool {
     throw new ViewError(`gave up on ${accountId}.${method}: ${lastErr}`, "transport");
   }
 
+  // Code hash of any account; "11111111111111111111111111111111" means no contract.
+  async codeHash(accountId: string): Promise<string> {
+    const body = JSON.stringify({
+      jsonrpc: "2.0",
+      id: "tr",
+      method: "query",
+      params: { request_type: "view_account", finality: "final", account_id: accountId },
+    });
+    let lastErr = "";
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const ep = await this.pick();
+      try {
+        const res = await fetch(ep.url, { method: "POST", headers: { "Content-Type": "application/json" }, body, signal: AbortSignal.timeout(30_000) });
+        const text = await res.text();
+        if (res.status === 429 || text.includes("-429") || text.includes("Rate limits exceeded")) {
+          ep.benchedUntil = Date.now() + this.benchMs;
+          lastErr = `429 from ${ep.url}`;
+          continue;
+        }
+        const json = JSON.parse(text);
+        if (json?.result?.code_hash) return json.result.code_hash as string;
+        if (/UNKNOWN_ACCOUNT|does not exist/i.test(text)) throw new ViewError(`no account ${accountId}`, "contract");
+        lastErr = text.slice(0, 300);
+      } catch (e) {
+        if (e instanceof ViewError) throw e;
+        lastErr = (e as Error).message;
+        ep.benchedUntil = Date.now() + 5_000;
+      }
+      await sleep(500 * 2 ** Math.min(attempt, 5));
+    }
+    throw new ViewError(`gave up on view_account ${accountId}: ${lastErr}`, "transport");
+  }
+
   private async pick(): Promise<Endpoint> {
     for (;;) {
       const wait = this.lastSend + this.minIntervalMs - Date.now();

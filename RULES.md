@@ -12,7 +12,7 @@ A claim is **valid** for contributor `C` under a funding DAO's config when all o
 
 | # | Check | Why |
 | --- | --- | --- |
-| 1 | `dao_id` is a direct sub-account of the Sputnik factory (`*.sputnik-dao.near` on mainnet, `*.sputnikv2.testnet` on testnet) | Only the factory can create those names, so the account really runs Sputnik |
+| 1 | `dao_id` is a direct sub-account of the Sputnik factory (`*.sputnik-dao.near` on mainnet, `*.sputnikv2.testnet` on testnet) | Only the factory can create those names, so the account started life as a Sputnik DAO. A DAO can later replace its own code (see §8) |
 | 2 | `dao_id` is in the funding DAO's `trusted_daos` list (the funding DAO may list itself) | Trust is relative: a ring of self-made DAOs earns nothing unless a funding DAO chooses to trust it |
 | 3 | `status == "Approved"` | Only work the paying DAO actually approved counts |
 | 4 | `kind` is `Transfer` | v1 counts direct payouts; see §6 for what the off-chain records also read |
@@ -128,3 +128,18 @@ Off-chain data is **never trusted for money**. The contracts re-read every claim
 | A colluding member of a trusted DAO | Bounded by `per_account_cap`, `period_budget` and the veto window |
 | A bug makes the lane approve other proposals | It only votes on proposals registered and checked field by field; tested; no full-access key |
 | Stale or forged off-chain data | The contracts re-read every claim on-chain |
+| A trusted DAO upgrades itself to code that fakes `get_proposal` | Not preventable on-chain (§8). Bounded by `per_account_cap`, `period_budget` and the veto window; flagged off-chain before anyone trusts the DAO |
+
+## 8. Trust assumption: trusted DAOs keep running Sputnik
+
+A Sputnik DAO can replace its own code through an `UpgradeSelf` proposal. A NEAR contract cannot read another account's code hash, so neither the verifier nor the lane can check, on-chain, that a trusted DAO still runs Sputnik.
+
+That is why trust is explicit (rule 2). A funding DAO trusts a DAO's **council**. A council that installs code which fakes approved payouts could equally approve real payouts to its friends; custom code only makes that cheaper. Either way the damage is bounded by the lane's limits and veto.
+
+Off-chain, every DAO's code hash is checked against the versions the factory publishes (`sputnik-dao.near.get_contracts_metadata`):
+
+- the crawler records each DAO's code hash
+- the snapshot labels each DAO with its Sputnik version, `none` (no contract), or `custom`
+- the CLI and the web app warn before a `custom` or `none` DAO is trusted
+
+The 2026-11-10 crawl found 10 factory DAOs that no longer answer `get_proposal` at all.

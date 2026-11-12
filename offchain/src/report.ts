@@ -10,6 +10,12 @@ const ROOT = path.resolve(import.meta.dirname, "../..");
 export const REPORT = path.join(ROOT, "data/mainnet/report.json");
 const YEAR_NS = 365n * 24n * 3600n * 1_000_000_000n;
 
+function countBy(xs: string[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const x of xs.sort()) out[x] = (out[x] ?? 0) + 1;
+  return out;
+}
+
 export function buildReport(s: Snapshot) {
   const withProposals = s.daos.filter((d) => d.proposals > 0).length;
   const payingDaos = new Set(s.payouts.map((p) => p.dao));
@@ -44,7 +50,10 @@ export function buildReport(s: Snapshot) {
       total: s.daos.length,
       with_any_proposal: withProposals,
       with_any_payout: payingDaos.size,
-      crawl_errors: s.daos.filter((d) => d.error).length,
+      unreadable: s.daos.filter((d) => d.error).length,
+      // RULES.md §7: a DAO can replace its own code. These are flagged by the
+      // CLI and the web app before anyone trusts them.
+      by_code_version: countBy(s.daos.map((d) => d.code_version ?? "custom")),
     },
     payouts: {
       total,
