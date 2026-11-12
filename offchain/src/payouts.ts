@@ -15,6 +15,8 @@ export type Payout = {
   token: string; // "" = native NEAR; otherwise the token contract or intents token id
   amount: string;
   time_ns: string;
+  proposer: string;
+  votes: number; // council votes it took to approve
 };
 
 /// Approved proposals whose effect can't be attributed to a receiver.
@@ -61,7 +63,13 @@ export function extractPayouts(
 
   for (const p of sorted) {
     if (p.status !== "Approved") continue;
-    const base = { dao, proposal_id: p.id, time_ns: String(p.submission_time) };
+    const base = {
+      dao,
+      proposal_id: p.id,
+      time_ns: String(p.submission_time),
+      proposer: p.proposer,
+      votes: Object.keys(p.votes ?? {}).length,
+    };
     const k = p.kind;
     if (typeof k !== "object" || k === null) continue;
 

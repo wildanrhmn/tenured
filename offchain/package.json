@@ -7,7 +7,8 @@
     "crawl": "tsx src/crawl.ts",
     "snapshot": "tsx src/snapshot.ts",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "reproduce": "tsx src/report.ts"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
