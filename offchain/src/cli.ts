@@ -65,7 +65,7 @@ export function defaultRules(trusted: string[], f: Flags = {}): Rules {
   return {
     trusted_daos: trusted,
     tokens: [
-      { token_id: TOKENS.near!.id, min_amount: units("1", 24) },
+      { token_id: TOKENS.near!.id, min_amount: units(flag(f, "min-near", "1"), 24) },
       ...["usdc", "usdc.e", "usdt", "usdt.e"].map((k) => ({ token_id: TOKENS[k]!.id, min_amount: units("10", 6) })),
       { token_id: TOKENS.dai!.id, min_amount: units("10", 18) },
     ],
@@ -179,7 +179,8 @@ const HELP = `track-record <command>
            [--claims dao#id,...] [--network mainnet|testnet]
   simulate <dao> [--token near|usdc|usdt|...] [--cap 500] [--budget 2000] [--period-days 30]
 
-  common:  --trust a,b,c   explicit trusted DAOs     --min-daos 2   --min-payouts 3   --json`;
+  common:  --trust a,b,c   explicit trusted DAOs     --min-daos 2   --min-payouts 3
+           --min-near 1    smallest NEAR payout that counts                 --json`;
 
 async function main() {
   const { cmd, pos, flags } = parse(process.argv.slice(2));
