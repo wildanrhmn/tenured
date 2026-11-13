@@ -64,6 +64,8 @@ export function generate(n = 5000, seed = 20261110) {
       () => (tr().receiver_id = pick(["other.near", 1, CLAIMANT])),
       () => (tr().token_id = pick(["meme.near", 3, "", "usdc.near"])),
       () => delete tr().amount,
+      () => (tr().msg = pick(["x", "", 5, null])),
+      () => delete tr().msg,
       () => delete p.proposer,
       () => (p.kind = pick(["Vote", { AddMemberToRole: { member_id: CLAIMANT, role: "c" } }])),
     ];
@@ -88,7 +90,7 @@ export function generate(n = 5000, seed = 20261110) {
         token_id: pick(["", "", "usdc.near", "meme.near", 3]),
         receiver_id: pick([CLAIMANT, CLAIMANT, "other.near", 1]),
         amount: pick(amounts),
-        msg: pick([null, null, "x"]),
+        msg: pick([null, null, null, "x", "", 5]),
       };
       if (maybe(0.04)) delete t.amount;
       p.kind = { Transfer: t };

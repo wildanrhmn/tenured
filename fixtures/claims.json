@@ -244,6 +244,28 @@
       "expect": "WrongReceiver"
     },
     {
+      "name": "paid through ft_transfer_call (msg set) doesn't count",
+      "claimant": "dev.near",
+      "proposal": {
+        "id": 14,
+        "proposer": "council.near",
+        "description": "",
+        "kind": {
+          "Transfer": {
+            "token_id": "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+            "receiver_id": "dev.near",
+            "amount": "50000000",
+            "msg": "{\"refund\":true}"
+          }
+        },
+        "status": "Approved",
+        "vote_counts": {},
+        "votes": {},
+        "submission_time": "1700000000000000000"
+      },
+      "expect": "WithMsg"
+    },
+    {
       "name": "paid in a token the funder doesn't count",
       "claimant": "dev.near",
       "proposal": {

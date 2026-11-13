@@ -52,6 +52,9 @@ pub enum Reject {
     Unreadable,
     NotApproved,
     NotTransfer,
+    /// A Transfer with a `msg` pays through `ft_transfer_call`, and the
+    /// receiver can hand the tokens straight back, so it doesn't count.
+    WithMsg,
     WrongReceiver,
     TokenNotCounted,
     BelowFloor,
@@ -149,6 +152,9 @@ pub fn check_proposal(raw: Option<&Value>, claimant: &str, rules: &Rules) -> Res
         return Err(Reject::NotApproved);
     }
     let t = p.transfer.ok_or(Reject::NotTransfer)?;
+    if t.msg.is_some() {
+        return Err(Reject::WithMsg);
+    }
     if t.receiver_id != claimant {
         return Err(Reject::WrongReceiver);
     }
@@ -219,12 +225,21 @@ pub mod chain {
     use super::*;
     use near_sdk::{env, AccountId, Gas, NearToken, Promise};
 
-    /// Gas for one `get_proposal` read on a paying DAO.
-    pub const GAS_PER_READ: Gas = Gas::from_tgas(8);
+    /// Gas for one read. Measured in the sandbox on sputnikdao2: a 15 KB
+    /// proposal costs about 3 Tgas and a 28 KB policy (900 members) about
+    /// 9 Tgas, both as a whole call. A read that runs out of gas fails, and
+    /// a failed read can only reject, so these err on the generous side.
+    pub const GAS_PROPOSAL_READ: Gas = Gas::from_tgas(5);
+    pub const GAS_POLICY_READ: Gas = Gas::from_tgas(12);
 
-    /// Largest `get_proposal` or `get_policy` response we read. Bounding it stops a hostile
-    /// DAO from burning the callback's gas with an enormous description.
-    pub const MAX_PROPOSAL_BYTES: usize = 64 * 1024;
+    /// Largest responses we parse. Bounding them stops a hostile DAO from
+    /// burning a callback's gas with an enormous description or member list.
+    /// On mainnet (2026-11-10) 99% of approved payout proposals are under
+    /// 1 KB and the largest is 17 KB; the largest policy is 24 KB. A
+    /// response over the limit is treated as unreadable, so it can only
+    /// reject.
+    pub const MAX_PROPOSAL_BYTES: usize = 16 * 1024;
+    pub const MAX_POLICY_BYTES: usize = 32 * 1024;
 
     /// Static rules plus "is this a valid account id", so a malformed name
     /// can't make the cross-contract call panic.
@@ -241,7 +256,7 @@ pub mod chain {
             "get_proposal".to_string(),
             serde_json::json!({ "id": proposal_id }).to_string().into_bytes(),
             NearToken::from_yoctonear(0),
-            GAS_PER_READ,
+            GAS_PROPOSAL_READ,
         )
     }
 
@@ -256,12 +271,12 @@ pub mod chain {
     }
 
     /// Results `first..first + n` of the joined reads. A failed call (for
-    /// example `ERR_NO_PROPOSAL`), an oversized response or an unparsable
-    /// body comes back as `None`.
-    pub fn read_results(first: u64, n: usize) -> Vec<Option<Value>> {
+    /// example `ERR_NO_PROPOSAL`), a response over `max_bytes` or an
+    /// unparsable body comes back as `None`.
+    pub fn read_results(first: u64, n: usize, max_bytes: usize) -> Vec<Option<Value>> {
         (first..first + n as u64)
             .map(|i| {
-                env::promise_result_checked(i, MAX_PROPOSAL_BYTES)
+                env::promise_result_checked(i, max_bytes)
                     .ok()
                     .and_then(|bytes| serde_json::from_slice(&bytes).ok())
             })
@@ -288,7 +303,7 @@ pub mod chain {
             "get_policy".to_string(),
             b"{}".to_vec(),
             NearToken::from_yoctonear(0),
-            GAS_PER_READ,
+            GAS_POLICY_READ,
         )
     }
 

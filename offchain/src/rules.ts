@@ -20,6 +20,7 @@ export type Reject =
   | "Unreadable"
   | "NotApproved"
   | "NotTransfer"
+  | "WithMsg"
   | "WrongReceiver"
   | "TokenNotCounted"
   | "BelowFloor"
@@ -64,6 +65,9 @@ export function checkProposal(raw: unknown, claimant: string, rules: Rules): Rej
   if (!tr || typeof tr.token_id !== "string" || typeof tr.receiver_id !== "string" || typeof tr.amount !== "string") {
     return "NotTransfer";
   }
+  // Rust decodes msg as Option<String>: any other type fails the whole Transfer.
+  if (tr.msg !== null && tr.msg !== undefined && typeof tr.msg !== "string") return "NotTransfer";
+  if (tr.msg !== null && tr.msg !== undefined) return "WithMsg";
   if (tr.receiver_id !== claimant) return "WrongReceiver";
   const floor = rules.tokens.find((f) => f.token_id === tr.token_id);
   if (!floor) return "TokenNotCounted";
