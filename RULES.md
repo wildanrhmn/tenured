@@ -8,6 +8,8 @@ A **claim** is a pointer to one past DAO proposal: `(dao_id, proposal_id)`.
 
 The contributor chooses which claims to present. Nothing about an account is published unless its owner presents it.
 
+The verifier contract checks claims under whatever rules the caller passes, so its attestation and its `verified` event include `rules_hash`, the sha256 of those rules. An attestation only means something for the rules it names.
+
 A claim is **valid** for contributor `C` under a funding DAO's config when all of these hold, read live from the paying DAO with `get_proposal`:
 
 | # | Check | Why |
@@ -15,7 +17,7 @@ A claim is **valid** for contributor `C` under a funding DAO's config when all o
 | 1 | `dao_id` is a direct sub-account of the Sputnik factory (`*.sputnik-dao.near` on mainnet, `*.sputnikv2.testnet` on testnet) | Only the factory can create those names, so the account started life as a Sputnik DAO. A DAO can later replace its own code (see §8) |
 | 2 | `dao_id` is in the funding DAO's `trusted_daos` list (the funding DAO may list itself) | Trust is relative: a ring of self-made DAOs earns nothing unless a funding DAO chooses to trust it |
 | 3 | `status == "Approved"` | Only work the paying DAO actually approved counts |
-| 4 | `kind` is `Transfer` | v1 counts direct payouts; see §6 for what the off-chain records also read |
+| 4 | `kind` is `Transfer` with no `msg` | v1 counts direct payouts; see §6 for what the off-chain records also read. A `msg` pays through `ft_transfer_call`, and the receiver can hand the tokens straight back, so it doesn't count |
 | 5 | `receiver_id == C` | You can only present your own payouts |
 | 6 | `token_id` is in the config's `tokens` list (`""` means native NEAR) | Payouts in junk tokens don't count |
 | 7 | `amount >= min_amount` for that token | One-yocto "payouts" don't count |
@@ -47,8 +49,8 @@ The lane is a Sputnik **role member, never a treasury**. It holds no tokens, and
 | `pay_token` | The token the lane may request payouts in |
 | `per_account_cap` | Most one contributor can receive per period |
 | `period_budget` | Most the lane can request in total per period |
-| `period_secs` | Length of a period; `period = floor(block_timestamp / period_secs)` |
-| `veto_secs` | How long a request waits before it can be approved. Must be shorter than the DAO's `proposal_period` |
+| `period_secs` | Length of a period; `period = floor(block_timestamp / period_secs)`. Fixed for the life of the lane, like `pay_token`, because the limits already used are counted in them |
+| `veto_secs` | How long a request waits before it can be approved (at most 30 days). The lane refuses any request whose window would end within 5 minutes of the proposal's expiry |
 | `guardians` | Accounts that may veto a request alone |
 | `max_proposal_age_secs` | How old a proposal may be when registered, so a nearly expired proposal can't slip through |
 
@@ -56,7 +58,7 @@ The lane is a Sputnik **role member, never a treasury**. It holds no tokens, and
 
 1. Contributor `C` files an ordinary `Transfer` proposal in the DAO, from their own wallet, paying the DAO's normal bond. Sputnik handles the bond exactly as it does for any proposal.
 2. `C` calls `register(proposal_id, amount, claims, nonce)` on the lane and attaches 0.01 NEAR for the storage the request uses (`storage_deposit()`; anything above it is refunded). The request is kept as history, so the deposit stays with the lane. Without it, anyone could drain the lane's balance with junk registrations.
-3. `(C, nonce)` must not have been used before, so retries don't double-register.
+3. `(C, nonce)` must not have been used before, and `C` can't have a live registration of the same proposal. Uniqueness is per account: someone else registering `C`'s proposal never blocks `C`. A refused registration can be retried; a vetoed one can't.
 4. `amount <= per_account_cap - used(C, period)` and `amount <= period_budget - used(period)`. Both are **debited before** any cross-contract call.
 5. The lane reads the proposal from its DAO and requires:
    - `proposer == C` and `receiver_id == C`
@@ -64,7 +66,7 @@ The lane is a Sputnik **role member, never a treasury**. It holds no tokens, and
    - its amount equals `amount`
    - status `InProgress`
    - submitted within the last `max_proposal_age_secs`
-   - not registered before
+   - it won't expire before the veto window ends (the lane reads the DAO's `proposal_period`)
 
    **The lane only ever votes on proposals whose exact content it has checked this way.**
 6. The claims are verified (§1, §2) in the same call.
@@ -76,12 +78,26 @@ The lane is a Sputnik **role member, never a treasury**. It holds no tokens, and
 
 Sputnik only rejects on a threshold, which is why the lane has its own single-guardian veto.
 
-**Execute.** After the window, **anyone** may call `execute(request_id)`. The lane checks that the request wasn't vetoed and the proposal is still `InProgress`, then votes `VoteApprove`. Its 1/1 role threshold approves it, and Sputnik pays from the treasury.
+**Execute.** After the window, **anyone** may call `execute(request_id)`. The lane checks that the request is still waiting and that the proposal won't expire within 5 minutes, then votes `VoteApprove`. Its 1/1 role threshold approves it, and Sputnik pays from the treasury.
 
-**Refunds.** If a registration fails its checks, or a request is vetoed, rejected or expires, its amount is credited back to both limits. Bonds never touch the lane: Sputnik returns them to `C` as the proposer, under its normal rules.
+The lane never votes on an expired proposal. In Sputnik, a vote that lands after expiry marks the proposal `Expired` in a way that can't be finalized, which would lock the contributor's bond.
+
+**Reading the outcome back.** After voting, the lane reads the proposal again rather than assuming success:
+
+| What the DAO recorded | Request becomes | Limits |
+| --- | --- | --- |
+| `Approved` | `Approved` | stay used |
+| `Rejected`, `Removed`, `Expired`, or the proposal is gone | `Refused` | credited back |
+| `InProgress` or `Failed`, with the lane's vote on record (for example the DAO changed the role's threshold) | `Voted` | **stay used**: the vote stands and could still pay out. `recheck` settles it later |
+| `InProgress`, with no vote from the lane (for example the DAO removed the role) | `Refused` | credited back |
+
+**Recovery.** A request stuck in `Checking` (a callback that never landed) can be released by anyone after 10 minutes. A request stuck in `Approving` can be rechecked after 10 minutes.
+
+**Refunds.** If a registration fails its checks, or a request is vetoed or refused, its amount is credited back to both limits. Bonds never touch the lane: Sputnik returns them to `C` as the proposer, under its normal rules.
 
 **The lane never:**
 - votes on a proposal that wasn't registered and checked as above. Its `transfer:VoteApprove` permission would otherwise let it approve any transfer in the DAO, so this is tested explicitly.
+- votes on a proposal that is about to expire.
 - holds funds.
 - has a full-access key after deployment.
 - changes its own config. Only the DAO can, through a proposal.
@@ -125,6 +141,10 @@ Off-chain data is **never trusted for money**. The contracts re-read every claim
 | Repeat the same claim in one request | Rule 8 |
 | Replay a request | `(C, nonce)` is single-use, and each proposal can be registered once |
 | Spam junk registrations to drain the lane's storage balance | Every registration pays a storage deposit (about 3× the bytes a request uses) |
+| Register someone else's proposal (or the next N ids) to block them | Registrations are unique per account, and only the proposer can pass the checks |
+| Present claims with huge descriptions or policies to starve the callback of gas | Responses are size-capped (16 KB / 32 KB) and the worst case is measured at 172 Tgas (§9); a stuck check is released after 10 minutes |
+| Count a payout the receiver handed back through `ft_transfer_call` | Payouts with a `msg` don't count (rule 4) |
+| Pass an attestation off as proof under rules it didn't use | Attestations and events carry `rules_hash` |
 | Register someone else's proposal, or one paying someone else | `proposer == receiver_id == C` |
 | Change the amount after registering | Sputnik proposals are immutable; the lane checks the exact amount |
 | Many qualifying accounts drain the lane | `period_budget` per period, debited before the call |
@@ -146,3 +166,18 @@ Off-chain, every DAO's code hash is checked against the versions the factory pub
 - the CLI and the web app warn before a `custom` or `none` DAO is trusted
 
 The 2026-11-10 crawl found 10 factory DAOs that no longer answer `get_proposal` at all.
+
+## 9. Limits and measured costs
+
+Measured in the sandbox against the real `sputnikdao2` code:
+
+| Case | Gas burnt |
+| --- | --- |
+| `register` with 3 claims | 17 Tgas |
+| `register`, worst case: 9 claims from 9 DAOs plus member checks (20 reads) | 55 Tgas |
+| `register` at the size limits: 15 KB proposals and 28 KB policies (900 members) | 172 Tgas |
+| `verify`, 10 claims at the size limits | 166 Tgas |
+
+- **Response size limits.** The contracts parse at most 16 KB per proposal and 32 KB per policy; anything larger is treated as unreadable, so it can only reject. On mainnet, 99% of approved payout proposals are under 1 KB (largest 17 KB, a single one over the limit) and the largest policy is 24 KB.
+- **Gas per read.** 5 Tgas per proposal and 12 Tgas per policy (a 28 KB policy costs about 9 Tgas).
+- **Storage.** A request uses about 320 bytes; registration pays 0.01 NEAR (1,000 bytes).
