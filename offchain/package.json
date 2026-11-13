@@ -11,7 +11,8 @@
     "reproduce": "tsx src/report.ts",
     "cli": "tsx src/cli.ts",
     "judge": "tsx src/judge.ts",
-    "mcp": "tsx src/mcp.ts"
+    "mcp": "tsx src/mcp.ts",
+    "fuzz": "tsx src/fuzz.ts"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
