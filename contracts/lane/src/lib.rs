@@ -1,4 +1,4 @@
-//! Track Record fast lane.
+//! Tenured fast lane.
 //!
 //! A Sputnik role member that never holds funds. A contributor files an
 //! ordinary Transfer proposal in the DAO, then registers it here with
@@ -11,11 +11,11 @@ use near_sdk::json_types::U128;
 use near_sdk::serde_json::{json, Value};
 use near_sdk::store::{LookupMap, LookupSet, Vector};
 use near_sdk::{env, log, near, require, AccountId, Gas, NearToken, Promise, PromiseOrValue};
-use track_record_rules::chain::{
+use tenured_rules::chain::{
     policy_daos, pre_checks, read_claims, read_policy, read_proposal, read_results, verdicts, MAX_POLICY_BYTES,
     MAX_PROPOSAL_BYTES,
 };
-use track_record_rules::{parse_proposal, summarize, Claim, Reject, Rules, Transfer};
+use tenured_rules::{parse_proposal, summarize, Claim, Reject, Rules, Transfer};
 
 /// Reads per registration: the proposal, the DAO's policy, one per claim
 /// and, when members are excluded, one policy per paying DAO. At most 20.
@@ -506,7 +506,7 @@ fn validate(c: &LaneConfig) {
 fn event(name: &str, data: Value) {
     log!(
         "EVENT_JSON:{}",
-        json!({ "standard": "track_record_lane", "version": "1.0.0", "event": name, "data": [data] })
+        json!({ "standard": "tenured_lane", "version": "1.0.0", "event": name, "data": [data] })
     );
 }
 
@@ -520,7 +520,7 @@ mod tests {
         LaneConfig {
             rules: Rules {
                 trusted_daos: vec!["a.sputnikv2.testnet".into()],
-                tokens: vec![track_record_rules::TokenFloor { token_id: "".into(), min_amount: "1".into() }],
+                tokens: vec![tenured_rules::TokenFloor { token_id: "".into(), min_amount: "1".into() }],
                 min_distinct_daos: 1,
                 min_payouts: 1,
                 exclude_members: false,

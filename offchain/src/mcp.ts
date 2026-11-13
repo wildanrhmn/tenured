@@ -14,7 +14,7 @@ import { defaultRules } from "./cli.js";
 const claim = z.object({ dao_id: z.string(), proposal_id: z.number().int().nonnegative() });
 const json = (v: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(v, null, 2) }] });
 
-const server = new McpServer({ name: "track-record", version: "0.1.0" });
+const server = new McpServer({ name: "tenured", version: "0.1.0" });
 
 server.registerTool(
   "find_claims",
@@ -89,7 +89,7 @@ server.registerTool(
   {
     title: "Plan a fast-lane payout request",
     description:
-      "Build the two transactions an account signs to request a payout through a Track Record lane: " +
+      "Build the two transactions an account signs to request a payout through a Tenured lane: " +
       "add_proposal on the lane's DAO (with the DAO's bond), then register on the lane with verified claims. " +
       "Nothing is signed; returns args, deposits, gas and near CLI commands.",
     inputSchema: {

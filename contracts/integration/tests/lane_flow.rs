@@ -124,7 +124,7 @@ async fn setup(veto_secs: u64) -> anyhow::Result<World> {
         .transact()
         .await?
         .into_result()?;
-    let lane = lane_acc.deploy(&wasm("target/near/track_record_lane/track_record_lane.wasm")).await?.into_result()?;
+    let lane = lane_acc.deploy(&wasm("target/near/tenured_lane/tenured_lane.wasm")).await?.into_result()?;
     lane.call("new")
         .args_json(json!({
             "dao": fund.id(),
@@ -156,7 +156,7 @@ async fn setup(veto_secs: u64) -> anyhow::Result<World> {
         .await?
         .into_result()?;
     let verifier = verifier_acc
-        .deploy(&wasm("target/near/track_record_verifier/track_record_verifier.wasm"))
+        .deploy(&wasm("target/near/tenured_verifier/tenured_verifier.wasm"))
         .await?
         .into_result()?;
     verifier.call("new").args_json(json!({ "factory": factory.id() })).transact().await?.into_result()?;

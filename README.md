@@ -1,6 +1,8 @@
-# Track Record
+# Tenured
 
-**Portable, verifiable contributor history for Sputnik DAOs on NEAR.**
+**Your DAO track record, verified on-chain. Proven contributors skip the queue.**
+
+Portable, verifiable contributor history for Sputnik DAOs on NEAR.
 
 A contributor who has already been paid for work by other DAOs can prove it to a new DAO. The new DAO's contract reads those DAOs' own proposals on-chain, so there is no oracle, no score server and no list to trust. A DAO can then let proven contributors' small payouts through a **fast lane**: a Sputnik role that approves them after a veto window, paid from the DAO's own treasury.
 
@@ -10,7 +12,7 @@ Built at NEAR HACKATHON (November 2026). Tracks: `social` (Social Money), `secur
 
 On NEAR every DAO payout is a proposal that a council must vote on, and every DAO starts from zero with every contributor. Trust earned in one community never carries to the next, even though the evidence is all public: five years of approved payouts sit in Sputnik DAO contracts on mainnet.
 
-Other entries in this hackathon build trust tiers *inside* one DAO. Track Record is the record that travels between DAOs, verified straight from the chain.
+Other entries in this hackathon build trust tiers *inside* one DAO. Tenured is the record that travels between DAOs, verified straight from the chain.
 
 ## What's in it
 
@@ -87,6 +89,8 @@ The Rust and TypeScript rule implementations are also **fuzzed against each othe
 
 ### 5. Watch it on testnet
 
+The testnet accounts carry the project's working name, `trackrecord-*`.
+
 | Account | Role |
 | --- | --- |
 | [`trackrecord-lane.testnet`](https://testnet.nearblocks.io/address/trackrecord-lane.testnet) | The lane contract |
@@ -115,7 +119,7 @@ To run the whole thing yourself on testnet with free faucet accounts, read [`scr
 AI agents increasingly do paid work for DAOs. `offchain/src/mcp.ts` is an MCP server, so an agent can use its own track record. Add it to any MCP client:
 
 ```json
-{ "mcpServers": { "track-record": { "command": "npm", "args": ["run", "-s", "mcp"], "cwd": "/path/to/this/repo" } } }
+{ "mcpServers": { "tenured": { "command": "npm", "args": ["run", "-s", "mcp"], "cwd": "/path/to/this/repo" } } }
 ```
 
 | Tool | What it does |

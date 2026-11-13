@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sets up the full Track Record demo on testnet, using only the near CLI.
+# Sets up the full Tenured demo on testnet, using only the near CLI.
 #
 #   1. three Sputnik DAOs from the real testnet factory (sputnikv2.testnet):
 #      alpha and beta (where the contributor has past paid work) and fund
@@ -51,7 +51,7 @@ last_id() { view "$1" get_last_proposal_id '{}' | tail -1 | tr -d '[:space:]'; }
 propose() {
   local id
   id=$(last_id "$1")
-  call "$2" "$1" add_proposal "{\"proposal\":{\"description\":\"${4:-Track Record demo}\",\"kind\":$3}}" '1 NEAR' >/dev/null
+  call "$2" "$1" add_proposal "{\"proposal\":{\"description\":\"${4:-Tenured demo}\",\"kind\":$3}}" '1 NEAR' >/dev/null
   echo "$id"
 }
 
@@ -69,7 +69,7 @@ for pair in "alpha:$P-fund1.testnet" "beta:$P-fund2.testnet" "fund:$P-fund3.test
   payer=${pair#*:}
   dao=$P-$name.$FACTORY
   if exists "$dao"; then echo "   $dao exists"; continue; fi
-  args=$(b64 "{\"config\":{\"name\":\"$P-$name\",\"purpose\":\"Track Record demo DAO\",\"metadata\":\"\"},\"policy\":[\"$COUNCIL\"]}")
+  args=$(b64 "{\"config\":{\"name\":\"$P-$name\",\"purpose\":\"Tenured demo DAO\",\"metadata\":\"\"},\"policy\":[\"$COUNCIL\"]}")
   call "$payer" "$FACTORY" create "{\"name\":\"$P-$name\",\"args\":\"$args\"}" '9 NEAR' '200.0 Tgas' >/dev/null
   echo "   created $dao"
 done
@@ -77,7 +77,7 @@ done
 echo "== 2. contracts"
 ./scripts/build-contracts.sh >/dev/null
 if [ -z "$(view "$VERIFIER" factory '{}' || true)" ]; then
-  near contract deploy "$VERIFIER" use-file contracts/target/near/track_record_verifier/track_record_verifier.wasm \
+  near contract deploy "$VERIFIER" use-file contracts/target/near/tenured_verifier/tenured_verifier.wasm \
     with-init-call new json-args "{\"factory\":\"$FACTORY\"}" prepaid-gas '30.0 Tgas' attached-deposit '0 NEAR' \
     network-config testnet sign-with-legacy-keychain send >/dev/null
   echo "   deployed verifier at $VERIFIER"
@@ -97,7 +97,7 @@ LANE_CONFIG=$(cat <<EOF
 EOF
 )
 if [ -z "$(view "$LANE" get_dao '{}' || true)" ]; then
-  near contract deploy "$LANE" use-file contracts/target/near/track_record_lane/track_record_lane.wasm \
+  near contract deploy "$LANE" use-file contracts/target/near/tenured_lane/tenured_lane.wasm \
     with-init-call new json-args "{\"dao\":\"$FUND\",\"factory\":\"$FACTORY\",\"config\":$LANE_CONFIG}" \
     prepaid-gas '30.0 Tgas' attached-deposit '0 NEAR' network-config testnet sign-with-legacy-keychain send >/dev/null
   echo "   deployed lane at $LANE for $FUND"
@@ -124,7 +124,7 @@ ROLE="{\"ChangePolicyAddOrUpdateRole\":{\"role\":{\"name\":\"fastlane\",\"kind\"
 if view "$FUND" get_policy '{}' | grep -q fastlane; then
   echo "   fastlane role already installed"
 else
-  id=$(propose "$FUND" "$COUNCIL" "$ROLE" "Install the Track Record fast lane")
+  id=$(propose "$FUND" "$COUNCIL" "$ROLE" "Install the Tenured fast lane")
   approve "$FUND" "$id" "$ROLE"
   echo "   installed via $FUND#$id"
 fi

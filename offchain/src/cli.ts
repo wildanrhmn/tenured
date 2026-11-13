@@ -1,4 +1,4 @@
-// track-record CLI.
+// tenured CLI.
 //
 //   npm run cli -- claims  <account> --trust-like <dao>
 //   npm run cli -- verify  <account> --trust-like <dao> [--claims dao#id,dao#id]
@@ -159,7 +159,7 @@ async function cmdSimulate(pos: string[], f: Flags) {
   );
 }
 
-const HELP = `track-record <command>
+const HELP = `tenured <command>
 
   claims   <account> --trust-like <dao>      best claims an account can present (from the snapshot)
   verify   <account> --trust-like <dao>      verify live against the DAOs' own proposals

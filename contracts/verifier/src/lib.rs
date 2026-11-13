@@ -1,4 +1,4 @@
-//! Track Record verifier.
+//! Tenured verifier.
 //!
 //! Checks a contributor's claims against the paying DAOs' own proposals,
 //! read live with `get_proposal`. No admin, no owner and no stored records:
@@ -6,8 +6,8 @@
 
 use near_sdk::serde_json::{json, Value};
 use near_sdk::{env, log, near, require, AccountId, Gas, Promise, PromiseOrValue};
-use track_record_rules::chain::{policy_daos, pre_checks, read_claims, read_policy, read_results, verdicts, MAX_POLICY_BYTES, MAX_PROPOSAL_BYTES};
-use track_record_rules::{summarize, Claim, Reject, Rules, Summary};
+use tenured_rules::chain::{policy_daos, pre_checks, read_claims, read_policy, read_results, verdicts, MAX_POLICY_BYTES, MAX_PROPOSAL_BYTES};
+use tenured_rules::{summarize, Claim, Reject, Rules, Summary};
 
 /// One read per claim, plus one per paying DAO when members are excluded;
 /// kept well under the 300 Tgas limit.
@@ -111,7 +111,7 @@ pub fn attest(
     log!(
         "EVENT_JSON:{}",
         json!({
-            "standard": "track_record",
+            "standard": "tenured",
             "version": "1.0.0",
             "event": "verified",
             "data": [{
@@ -139,7 +139,7 @@ mod tests {
     fn rules() -> Rules {
         Rules {
             trusted_daos: vec!["a.sputnikv2.testnet".into(), "b.sputnikv2.testnet".into()],
-            tokens: vec![track_record_rules::TokenFloor { token_id: "".into(), min_amount: "10".into() }],
+            tokens: vec![tenured_rules::TokenFloor { token_id: "".into(), min_amount: "10".into() }],
             min_distinct_daos: 2,
             min_payouts: 2,
             exclude_members: false,

@@ -183,7 +183,7 @@ export async function lanePlan(
     method: "add_proposal",
     args: {
       proposal: {
-        description: "Track Record fast lane payout",
+        description: "Tenured fast lane payout",
         kind: { Transfer: { token_id: config.pay_token, receiver_id: account, amount } },
       },
     },
