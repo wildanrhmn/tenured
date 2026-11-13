@@ -55,7 +55,7 @@ The lane is a Sputnik **role member, never a treasury**. It holds no tokens, and
 **Request.**
 
 1. Contributor `C` files an ordinary `Transfer` proposal in the DAO, from their own wallet, paying the DAO's normal bond. Sputnik handles the bond exactly as it does for any proposal.
-2. `C` calls `register(proposal_id, amount, claims, nonce)` on the lane.
+2. `C` calls `register(proposal_id, amount, claims, nonce)` on the lane and attaches 0.01 NEAR for the storage the request uses (`storage_deposit()`; anything above it is refunded). The request is kept as history, so the deposit stays with the lane. Without it, anyone could drain the lane's balance with junk registrations.
 3. `(C, nonce)` must not have been used before, so retries don't double-register.
 4. `amount <= per_account_cap - used(C, period)` and `amount <= period_budget - used(period)`. Both are **debited before** any cross-contract call.
 5. The lane reads the proposal from its DAO and requires:
@@ -124,6 +124,7 @@ Off-chain data is **never trusted for money**. The contracts re-read every claim
 | Present someone else's payouts | `receiver_id == C` (rule 5) |
 | Repeat the same claim in one request | Rule 8 |
 | Replay a request | `(C, nonce)` is single-use, and each proposal can be registered once |
+| Spam junk registrations to drain the lane's storage balance | Every registration pays a storage deposit (about 3× the bytes a request uses) |
 | Register someone else's proposal, or one paying someone else | `proposer == receiver_id == C` |
 | Change the amount after registering | Sputnik proposals are immutable; the lane checks the exact amount |
 | Many qualifying accounts drain the lane | `period_budget` per period, debited before the call |

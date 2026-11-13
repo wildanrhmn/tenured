@@ -169,6 +169,7 @@ export async function lanePlan(
   const config = await rpc.view<LaneConfig>(lane, "get_config");
   const policy = await rpc.view<{ proposal_bond: string }>(dao, "get_policy");
   const nextId = await rpc.view<number>(dao, "get_last_proposal_id");
+  const storage = await rpc.view<string>(lane, "storage_deposit");
   const use = claims ?? (await scanClaims(account, config.rules.trusted_daos, config.rules, network));
   const check = await verifyLive(account, use, config.rules, network);
 
@@ -196,7 +197,7 @@ export async function lanePlan(
     // proposal_id is the id add_proposal returns; nextId is what it will be
     // unless someone else files a proposal first.
     args: { proposal_id: nextId, amount, claims: use, nonce },
-    deposit_yocto: "0",
+    deposit_yocto: storage, // the request's storage, paid by the caller
     gas_tgas: 300,
   };
   return {

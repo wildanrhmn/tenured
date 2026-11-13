@@ -39,7 +39,7 @@ case "${1:-}" in
     echo "== $DEV registers it with the lane, presenting three past payouts"
     nonce=$(date +%s)
     call "$DEV" "$LANE" register \
-      "{\"proposal_id\":$id,\"amount\":\"$amount\",\"nonce\":$nonce,\"claims\":[{\"dao_id\":\"$ALPHA\",\"proposal_id\":0},{\"dao_id\":\"$ALPHA\",\"proposal_id\":1},{\"dao_id\":\"$BETA\",\"proposal_id\":0}]}" '0 NEAR'
+      "{\"proposal_id\":$id,\"amount\":\"$amount\",\"nonce\":$nonce,\"claims\":[{\"dao_id\":\"$ALPHA\",\"proposal_id\":0},{\"dao_id\":\"$ALPHA\",\"proposal_id\":1},{\"dao_id\":\"$BETA\",\"proposal_id\":0}]}" '0.01 NEAR'
     view "$LANE" get_request_by_proposal "{\"proposal_id\":$id}"
     ;;
   status)
