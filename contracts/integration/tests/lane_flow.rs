@@ -547,7 +547,7 @@ async fn registrations_pay_for_their_own_storage() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
-async fn an_expired_proposal_is_refused_not_counted() -> anyhow::Result<()> {
+async fn a_veto_window_longer_than_the_proposal_is_refused_up_front() -> anyhow::Result<()> {
     let w = setup(30).await?;
     let claims = w.history().await?;
     // The DAO's proposals now expire after 20 s, shorter than the 30 s veto window.
@@ -556,21 +556,148 @@ async fn an_expired_proposal_is_refused_not_counted() -> anyhow::Result<()> {
         "bounty_bond": null, "bounty_forgiveness_period": null } } }))
     .await?;
 
-    let pid = propose(&w.fund, &w.dev, transfer(w.dev.id(), 4)).await?;
+    let kind = transfer(w.dev.id(), 4);
+    let pid = propose(&w.fund, &w.dev, kind.clone()).await?;
     assert!(w.register(&w.dev, pid, 4, &claims, 1).await.is_success());
-    w.wait(31).await?;
-    let before = w.dev.view_account().await?.balance;
-    let r = w.execute(&w.eve, 0).await;
-    assert!(r.is_success(), "{}", failure_text(&r));
-
-    // The lane's vote succeeds as a call but can't approve an expired
-    // proposal; the lane reads that back instead of assuming success.
     let req = w.request(0).await?;
     assert_eq!(status_of(&req), "Refused", "{req}");
-    assert_ne!(status(&w.fund, pid).await?, "Approved");
-    assert!(w.dev.view_account().await?.balance <= before);
+    assert!(req["status"]["Refused"]["reason"].as_str().unwrap().contains("veto window ends after the proposal expires"));
+
+    // The lane never voted, so the expired proposal can still be finalized
+    // (by the council, under the default policy) and the bond goes back.
+    w.wait(21).await?;
+    let before = w.dev.view_account().await?.balance;
+    act(&w.fund, &w.council, pid, "Finalize", kind).await.into_result()?;
+    assert_eq!(status(&w.fund, pid).await?, "Expired");
+    let after = w.dev.view_account().await?.balance;
+    assert!(after.as_yoctonear() > before.as_yoctonear() + NEAR * 9 / 10, "bond came back");
+    Ok(())
+}
+
+#[tokio::test]
+async fn squatting_someone_elses_proposal_does_not_block_them() -> anyhow::Result<()> {
+    let w = setup(30).await?;
+    let claims = w.history().await?;
+    let pid = propose(&w.fund, &w.dev, transfer(w.dev.id(), 4)).await?;
+    // eve registers dev's proposal first, and the next ten ids for good measure.
+    for (i, id) in (pid..pid + 11).enumerate() {
+        assert!(w.register(&w.eve, id, 4, &claims, i as u64).await.is_success());
+    }
+    let r = w.register(&w.dev, pid, 4, &claims, 1).await;
+    assert!(r.is_success(), "{}", failure_text(&r));
+    let mine: Value = w.lane.view("get_request_by_proposal").args_json(json!({ "proposal_id": pid })).await?.json()?;
+    assert_eq!(mine["account_id"], w.dev.id().to_string());
+    assert_eq!(status_of(&mine), "Waiting", "{mine}");
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_vote_that_does_not_approve_keeps_the_amount_counted() -> anyhow::Result<()> {
+    let w = setup(30).await?;
+    let claims = w.history().await?;
+    // The DAO puts a second member in the fastlane role, so the lane's vote
+    // alone no longer reaches the 1/1 threshold.
+    w.change_policy(json!({ "ChangePolicyAddOrUpdateRole": { "role": {
+        "name": "fastlane", "kind": { "Group": [w.lane.id(), w.guardian.id()] },
+        "permissions": ["transfer:VoteApprove"],
+        "vote_policy": { "transfer": { "weight_kind": "RoleWeight", "quorum": "0", "threshold": [1, 1] } } } } }))
+    .await?;
+
+    let kind = transfer(w.dev.id(), 4);
+    let pid = propose(&w.fund, &w.dev, kind.clone()).await?;
+    assert!(w.register(&w.dev, pid, 4, &claims, 1).await.is_success());
+    w.wait(31).await?;
+    assert!(w.execute(&w.eve, 0).await.is_success());
+    assert_eq!(status_of(&w.request(0).await?), "Voted");
+    assert_eq!(status(&w.fund, pid).await?, "InProgress");
     let usage: Value = w.lane.view("get_usage").args_json(json!({ "account_id": w.dev.id() })).await?.json()?;
-    assert_eq!(usage["used_by_account"], "0");
+    assert_eq!(usage["used_by_account"], (4 * NEAR).to_string(), "the vote stands, so the amount stays counted");
+
+    // The second member approves; recheck settles the request.
+    act(&w.fund, &w.guardian, pid, "VoteApprove", kind).await.into_result()?;
+    let r = w.eve.call(w.lane.id(), "recheck").args_json(json!({ "id": 0 })).max_gas().transact().await?;
+    assert!(r.is_success(), "{}", failure_text(&r));
+    assert_eq!(status_of(&w.request(0).await?), "Approved");
+    Ok(())
+}
+
+#[tokio::test]
+async fn the_largest_allowed_inputs_still_fit() -> anyhow::Result<()> {
+    let w = setup(30).await?;
+    // Nine DAOs whose policies list 900 members each (about 27 KB, under the
+    // 32 KB limit), each paying dev once with a 15 KB description (under 16 KB).
+    let crowd: Vec<String> = (0..900).map(|i| format!("member-number-{i:04}.test.near")).collect();
+    let mut daos = vec![];
+    let mut claims = vec![];
+    for i in 0..9 {
+        let acc = w.factory.create_subaccount(&format!("big{i}")).initial_balance(NearToken::from_near(60)).transact().await?.into_result()?;
+        let d = acc.deploy(&wasm("res/sputnikdao2.wasm")).await?.into_result()?;
+        // A one-person council plus a 900-member group with no permissions,
+        // so the policy is large but a single council vote still approves.
+        let policy = json!({
+            "roles": [
+                { "name": "all", "kind": "Everyone", "permissions": ["*:AddProposal"], "vote_policy": {} },
+                { "name": "council", "kind": { "Group": [w.council.id()] }, "permissions": ["*:*"], "vote_policy": {} },
+                { "name": "crowd", "kind": { "Group": crowd }, "permissions": [], "vote_policy": {} },
+            ],
+            "default_vote_policy": { "weight_kind": "RoleWeight", "quorum": "0", "threshold": [1, 2] },
+            "proposal_bond": NEAR.to_string(),
+            "proposal_period": "604800000000000",
+            "bounty_bond": NEAR.to_string(),
+            "bounty_forgiveness_period": "86400000000000",
+        });
+        d.call("new")
+            .args_json(json!({ "config": { "name": format!("big{i}"), "purpose": "test", "metadata": "" }, "policy": policy }))
+            .max_gas()
+            .transact()
+            .await?
+            .into_result()?;
+        let kind = transfer(w.dev.id(), 1);
+        let id: u64 = w.dev
+            .call(d.id(), "add_proposal")
+            .args_json(json!({ "proposal": { "description": "x".repeat(15_000), "kind": kind } }))
+            .deposit(NearToken::from_near(1))
+            .max_gas()
+            .transact()
+            .await?
+            .into_result()?
+            .json()?;
+        act(&d, &w.council, id, "VoteApprove", kind).await.into_result()?;
+        claims.push(json!({ "dao_id": d.id(), "proposal_id": id }));
+        daos.push(d.id().to_string());
+    }
+    let policy: Value = w.worker.view(&daos[0].parse()?, "get_policy").await?.json()?;
+    println!("policy size {} bytes", serde_json::to_vec(&policy)?.len());
+    // What each read costs when made as a call, at these sizes.
+    let first: near_workspaces::AccountId = daos[0].parse()?;
+    let g = w.eve.call(&first, "get_policy").max_gas().transact().await?;
+    println!("get_policy (28 KB) as a call burnt {} Tgas", g.total_gas_burnt.as_tgas());
+    let g = w.eve.call(&first, "get_proposal").args_json(json!({ "id": 0 })).max_gas().transact().await?;
+    println!("get_proposal (15 KB) as a call burnt {} Tgas", g.total_gas_burnt.as_tgas());
+    let g = w.eve.call(w.alpha.id(), "get_policy").max_gas().transact().await?;
+    println!("get_policy (1 member) as a call burnt {} Tgas", g.total_gas_burnt.as_tgas());
+
+    w.reconfigure(|c| {
+        c["rules"]["trusted_daos"] = json!(daos);
+        c["rules"]["min_distinct_daos"] = json!(9);
+        c["rules"]["min_payouts"] = json!(9);
+        c["rules"]["exclude_members"] = json!(true);
+    })
+    .await?;
+    let rules = json!({ "trusted_daos": daos, "tokens": [{ "token_id": "", "min_amount": NEAR.to_string() }],
+                        "min_distinct_daos": 9, "min_payouts": 9, "exclude_members": true });
+    let a = w.eve.call(w.verifier.id(), "verify")
+        .args_json(json!({ "account_id": w.dev.id(), "claims": claims, "rules": rules })).max_gas().transact().await?;
+    println!("verify at the size limits burnt {} Tgas", a.total_gas_burnt.as_tgas());
+    let a: Value = a.into_result()?.json()?;
+    println!("verifier reasons: {:?}", a["results"].as_array().unwrap().iter().map(|r| r["reason"].clone()).collect::<Vec<_>>());
+
+    let pid = propose(&w.fund, &w.dev, transfer(w.dev.id(), 1)).await?;
+    let r = w.register(&w.dev, pid, 1, &json!(claims), 1).await;
+    assert!(r.is_success(), "{}", failure_text(&r));
+    println!("register at the size limits burnt {} Tgas", r.total_gas_burnt.as_tgas());
+    let req = w.request(0).await?;
+    assert_eq!(status_of(&req), "Waiting", "{req}");
     Ok(())
 }
 
