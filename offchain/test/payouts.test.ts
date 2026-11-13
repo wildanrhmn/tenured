@@ -23,6 +23,7 @@ describe("extractPayouts", () => {
     nextId = 0;
     const proposals: Proposal[] = [
       prop({ Transfer: { token_id: "", receiver_id: "a.near", amount: "5" } }),
+      prop({ Transfer: { token_id: "usdc.near", receiver_id: "callback.near", amount: "5", msg: "{}" } }),
       prop({ Transfer: { token_id: "", receiver_id: "rejected.near", amount: "5" } }, "Rejected"),
       prop({ Transfer: { token_id: "", receiver_id: "failed.near", amount: "5" } }, "Failed"),
       prop({ AddBounty: { bounty: { description: "", token: "usdt.tether-token.near", amount: "100", times: 1, max_deadline: "0" } } }),
@@ -50,6 +51,7 @@ describe("extractPayouts", () => {
 
     expect(payouts.map((p) => [p.path, p.receiver, p.token, p.amount])).toEqual([
       ["transfer", "a.near", "", "5"],
+      ["ft_transfer", "callback.near", "usdc.near", "5"],
       // bounty 1 is the second *approved* AddBounty (the rejected one never got an id)
       ["bounty", "hunter.near", "", "9"],
       ["ft_transfer", "b.near", "usdt.tether-token.near", "20"],

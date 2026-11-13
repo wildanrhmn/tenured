@@ -74,8 +74,12 @@ export function extractPayouts(
     if (typeof k !== "object" || k === null) continue;
 
     if ("Transfer" in k) {
-      const t = (k as { Transfer: { token_id: string; receiver_id: string; amount: string } }).Transfer;
-      payouts.push({ ...base, path: "transfer", receiver: t.receiver_id, token: t.token_id, amount: t.amount });
+      const t = (k as { Transfer: { token_id: string; receiver_id: string; amount: string; msg?: string | null } }).Transfer;
+      // With a msg the DAO paid through ft_transfer_call, which the receiver
+      // can refund; like the contracts (RULES.md rule 4), don't treat it as
+      // a claimable transfer.
+      const path = t.msg === null || t.msg === undefined ? "transfer" : "ft_transfer";
+      payouts.push({ ...base, path, receiver: t.receiver_id, token: t.token_id, amount: t.amount });
     } else if ("BountyDone" in k) {
       const b = (k as { BountyDone: { bounty_id: number; receiver_id: string } }).BountyDone;
       const bounty = bounties[b.bounty_id];

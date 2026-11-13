@@ -20,9 +20,9 @@
   "payouts": {
     "total": 33126,
     "by_path": {
-      "transfer": 31016,
+      "transfer": 31015,
       "bounty": 381,
-      "ft_transfer": 753,
+      "ft_transfer": 754,
       "intents": 644,
       "bulk": 332
     },
