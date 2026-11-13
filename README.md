@@ -73,14 +73,17 @@ You should see each claimed proposal read live from its DAO and marked `ok`, the
 cd contracts && cargo test
 ```
 
-Needs Rust and [`cargo-near`](https://github.com/near/cargo-near). You should see the unit tests for the rules, verifier and lane, then **6 sandbox tests** that run a local NEAR node with the exact Sputnik code the testnet factory deploys (`contracts/res/sputnikdao2.wasm`; its sha256 equals `sputnikv2.testnet.get_default_code_hash()`). They cover:
+Needs Rust and [`cargo-near`](https://github.com/near/cargo-near). You should see 29 unit tests (rules, verifier, lane), then **14 sandbox tests** that run a local NEAR node with the exact Sputnik code the testnet factory deploys (`contracts/res/sputnikdao2.wasm`; its sha256 equals `sputnikv2.testnet.get_default_code_hash()`).
 
-- payout after the veto window
-- a guardian veto
-- a council rejection during the window
-- proposals that aren't exactly yours
-- caps, nonces and double registration
-- the verifier
+The sandbox tests cover:
+
+- **The happy path:** payout after the veto window; the verifier's attestations.
+- **Stopping a request:** a single guardian's veto; a council rejection during the window; the DAO removing the lane's role.
+- **Proposals and limits:** proposals that aren't exactly yours; caps, nonces and double registration; someone squatting your proposal ID.
+- **Edge cases:** a vote that doesn't approve; a veto window longer than the proposal (the bond stays recoverable); councils paying themselves.
+- **Costs:** storage paid by callers; the worst case of 9 claims from 9 DAOs; the largest inputs the size limits allow (172 Tgas).
+
+The Rust and TypeScript rule implementations are also **fuzzed against each other**. `fixtures/random-claims.json` holds 5,000 random and nearly-valid claims plus 300 static cases. Rust checks every TypeScript verdict, and a TypeScript test checks the file still matches its generator.
 
 ### 5. Watch it on testnet
 
@@ -155,6 +158,24 @@ Every number comes from `data/mainnet/report.json`, which `npm run reproduce` re
   - 2,223 more went out through chain signatures, whose recipients can't be read from the proposal. These are reported, not guessed.
 - **1,048 accounts can already present payouts from two or more DAOs**, and 489 were paid by three or more. They qualify on day one, with no sign-up.
 - **60% of payouts were filed by the person who got paid.** That is exactly the lane's flow, so it matches how DAOs already work.
+
+## Security review
+
+An independent review of the contracts found the issues below. Each one is fixed and has a sandbox test, or was refuted by measurement.
+
+| Finding | Severity | Outcome |
+| --- | --- | --- |
+| Anyone could reserve any proposal id and block its real proposer | High | Fixed: registrations are unique per account |
+| The lane paid for every registration's storage, so junk registrations could drain it | Medium | Fixed: registration pays 0.01 NEAR |
+| Worst-case reads might exceed 300 Tgas | Medium | Refuted: 55 Tgas worst case, 172 Tgas at the size limits |
+| Huge proposals or policies could starve the callback of gas | Medium | Fixed: 16 KB / 32 KB caps sized from mainnet data; stuck checks release after 10 min |
+| Voting after expiry locks the contributor's bond (a Sputnik quirk) | Low | Fixed: the lane reads the proposal period and never votes near expiry |
+| A refund while the lane's vote still stood could let a payout escape the budget | Low | Fixed: new `Voted` state keeps the amount counted |
+| `recheck` could race an in-flight vote; missing config bounds; `u32` id aliasing | Low | Fixed |
+| An attestation didn't say which rules it used | Low | Fixed: `rules_hash` in attestations and events |
+| Payouts through `ft_transfer_call` (`msg`) can be refunded by the receiver | Info | Fixed: they don't count |
+
+Fuzzing the two rule implementations then found 246 disagreements in number parsing (`"+5"`, values past `u64`/`u128`). Both sides now accept canonical decimals only.
 
 ## Trust model, honestly
 
