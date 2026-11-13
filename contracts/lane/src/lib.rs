@@ -23,6 +23,12 @@ const GAS_ON_EXECUTED: Gas = Gas::from_tgas(20);
 const NS: u64 = 1_000_000_000;
 /// After this long a request still in `Checking` can be released.
 const STUCK_SECS: u64 = 3600;
+/// What a registration must attach for the storage it causes: the request
+/// record (kept as history, including a refusal reason or veto), its nonce
+/// and its proposal index. 0.01 NEAR covers 1,000 bytes, well above the
+/// worst case. Without it, anyone could drain the lane's balance by
+/// registering junk (NEAR security checklist: storage cost attacks).
+pub const STORAGE_DEPOSIT: NearToken = NearToken::from_millinear(10);
 
 #[near(serializers = [json, borsh])]
 #[derive(Clone, Debug, PartialEq)]
@@ -120,9 +126,14 @@ impl Lane {
     /// Registers the caller's own Transfer proposal for the fast lane.
     ///
     /// Limits are debited here, before any cross-contract call, and credited
-    /// back if any check fails (RULES.md §3).
+    /// back if any check fails (RULES.md §3). The caller pays for the storage
+    /// the request uses (`STORAGE_DEPOSIT`); anything attached above that is
+    /// refunded.
+    #[payable]
     pub fn register(&mut self, proposal_id: u64, amount: U128, claims: Vec<Claim>, nonce: u64) -> Promise {
         let account_id = env::predecessor_account_id();
+        let attached = env::attached_deposit();
+        require!(attached >= STORAGE_DEPOSIT, "attach 0.01 NEAR for the request's storage");
         require!(!claims.is_empty(), "no claims");
         require!(claims.len() <= MAX_CLAIMS, "too many claims");
         require!(amount.0 > 0, "amount must be positive");
@@ -152,6 +163,11 @@ impl Lane {
             status: Status::Checking,
         });
         self.by_proposal.insert(proposal_id, id);
+
+        let refund = attached.saturating_sub(STORAGE_DEPOSIT);
+        if !refund.is_zero() {
+            Promise::new(account_id.clone()).transfer(refund).detach();
+        }
 
         let statics = pre_checks(&claims, &self.config.rules, self.factory.as_str());
         let daos = policy_daos(&claims, &statics, &self.config.rules);
@@ -279,6 +295,11 @@ impl Lane {
     }
 
     // ---- views ----
+
+    /// What `register` must attach, in yoctoNEAR.
+    pub fn storage_deposit(&self) -> U128 {
+        U128(STORAGE_DEPOSIT.as_yoctonear())
+    }
 
     pub fn get_dao(&self) -> AccountId {
         self.dao.clone()
@@ -416,6 +437,7 @@ mod tests {
         let mut ctx = VMContextBuilder::new();
         ctx.current_account_id("lane.testnet".parse().unwrap())
             .predecessor_account_id(caller)
+            .attached_deposit(STORAGE_DEPOSIT)
             .block_timestamp(1_000_000 * NS);
         testing_env!(ctx.build());
         Lane::new("dao.sputnikv2.testnet".parse().unwrap(), "sputnikv2.testnet".parse().unwrap(), config())
@@ -450,6 +472,7 @@ mod tests {
         testing_env!(VMContextBuilder::new()
             .current_account_id("lane.testnet".parse().unwrap())
             .predecessor_account_id(accounts(2))
+            .attached_deposit(STORAGE_DEPOSIT)
             .block_timestamp(1_000_000 * NS)
             .build());
         let _ = lane.register(8, U128(60), claims(), 1);
@@ -483,6 +506,18 @@ mod tests {
     fn strangers_cannot_veto() {
         let mut lane = setup(accounts(1));
         lane.veto(0);
+    }
+
+    #[test]
+    #[should_panic(expected = "attach 0.01 NEAR")]
+    fn registering_without_a_storage_deposit_fails() {
+        let mut lane = setup(accounts(1));
+        testing_env!(VMContextBuilder::new()
+            .current_account_id("lane.testnet".parse().unwrap())
+            .predecessor_account_id(accounts(1))
+            .block_timestamp(1_000_000 * NS)
+            .build());
+        let _ = lane.register(7, U128(10), claims(), 1);
     }
 
     #[test]

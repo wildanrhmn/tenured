@@ -105,7 +105,7 @@ async fn setup(veto_secs: u64) -> anyhow::Result<World> {
     let root = worker.root_account()?;
     let factory = root
         .create_subaccount("factory")
-        .initial_balance(NearToken::from_near(500))
+        .initial_balance(NearToken::from_near(1500))
         .transact()
         .await?
         .into_result()?;
@@ -188,8 +188,13 @@ impl World {
     }
 
     async fn register(&self, who: &Account, proposal_id: u64, near: u128, claims: &Value, nonce: u64) -> ExecutionFinalResult {
+        self.register_yocto(who, proposal_id, near * NEAR, claims, nonce).await
+    }
+
+    async fn register_yocto(&self, who: &Account, proposal_id: u64, amount: u128, claims: &Value, nonce: u64) -> ExecutionFinalResult {
         who.call(self.lane.id(), "register")
-            .args_json(json!({ "proposal_id": proposal_id, "amount": (near * NEAR).to_string(), "claims": claims, "nonce": nonce }))
+            .args_json(json!({ "proposal_id": proposal_id, "amount": amount.to_string(), "claims": claims, "nonce": nonce }))
+            .deposit(NearToken::from_millinear(10))
             .max_gas()
             .transact()
             .await
@@ -198,6 +203,27 @@ impl World {
 
     async fn request(&self, id: u64) -> anyhow::Result<Value> {
         Ok(self.lane.view("get_request").args_json(json!({ "id": id })).await?.json()?)
+    }
+
+    /// The funding DAO changes the lane's config through a FunctionCall
+    /// proposal, the only way it can be changed.
+    async fn reconfigure(&self, change: impl FnOnce(&mut Value)) -> anyhow::Result<()> {
+        let mut config: Value = self.lane.view("get_config").await?.json()?;
+        change(&mut config);
+        use base64::Engine;
+        let args = base64::engine::general_purpose::STANDARD.encode(serde_json::to_vec(&json!({ "config": config }))?);
+        let kind = json!({ "FunctionCall": { "receiver_id": self.lane.id(), "actions": [{
+            "method_name": "configure", "args": args, "deposit": "0", "gas": "30000000000000" }] } });
+        let id = propose(&self.fund, &self.council, kind.clone()).await?;
+        act(&self.fund, &self.council, id, "VoteApprove", kind).await.into_result()?;
+        Ok(())
+    }
+
+    /// A policy change in the funding DAO, approved by the council.
+    async fn change_policy(&self, kind: Value) -> anyhow::Result<()> {
+        let id = propose(&self.fund, &self.council, kind.clone()).await?;
+        act(&self.fund, &self.council, id, "VoteApprove", kind).await.into_result()?;
+        Ok(())
     }
 
     async fn execute(&self, who: &Account, id: u64) -> ExecutionFinalResult {
@@ -437,5 +463,131 @@ async fn councils_paying_themselves_can_be_excluded() -> anyhow::Result<()> {
     // An outside contributor is unaffected.
     let a: Value = verify(&w.dev, &dev_claims, true).await?.into_result()?.json()?;
     assert_eq!(a["summary"]["qualifies"], true, "{a}");
+    Ok(())
+}
+
+#[tokio::test]
+async fn nine_claims_from_nine_daos_fit_in_one_call() -> anyhow::Result<()> {
+    let w = setup(30).await?;
+    // dev was paid once by each of nine DAOs.
+    let mut daos = vec![];
+    let mut claims = vec![];
+    for i in 0..9 {
+        let d = dao(&w.factory, &format!("guild{i}"), &w.council).await?;
+        let id = paid(&d, &w.council, &w.dev, 1).await?;
+        claims.push(json!({ "dao_id": d.id(), "proposal_id": id }));
+        daos.push(d.id().to_string());
+    }
+    // The DAO trusts all nine and also excludes members: 1 + 9 + 9 reads.
+    w.reconfigure(|c| {
+        c["rules"]["trusted_daos"] = json!(daos);
+        c["rules"]["min_distinct_daos"] = json!(9);
+        c["rules"]["min_payouts"] = json!(9);
+        c["rules"]["exclude_members"] = json!(true);
+    })
+    .await?;
+
+    let pid = propose(&w.fund, &w.dev, transfer(w.dev.id(), 1)).await?;
+    let r = w.register(&w.dev, pid, 1, &json!(claims), 1).await;
+    assert!(r.is_success(), "{}", failure_text(&r));
+    println!("register with 9 claims and 9 policy reads burnt {} Tgas", r.total_gas_burnt.as_tgas());
+    let req = w.request(0).await?;
+    assert_eq!(status_of(&req), "Waiting", "{req}");
+    assert_eq!(req["distinct_daos"], 9);
+
+    // The verifier's limit is ten claims; nine plus a duplicate exercises it.
+    let mut ten = claims.clone();
+    ten.push(claims[0].clone());
+    let rules = json!({
+        "trusted_daos": daos, "tokens": [{ "token_id": "", "min_amount": NEAR.to_string() }],
+        "min_distinct_daos": 9, "min_payouts": 9, "exclude_members": true,
+    });
+    let r = w.eve
+        .call(w.verifier.id(), "verify")
+        .args_json(json!({ "account_id": w.dev.id(), "claims": ten, "rules": rules }))
+        .max_gas()
+        .transact()
+        .await?;
+    println!("verify with 10 claims and 9 policy reads burnt {} Tgas", r.total_gas_burnt.as_tgas());
+    let a: Value = r.into_result()?.json()?;
+    assert_eq!(a["summary"]["qualifies"], true, "{a}");
+    assert_eq!(a["results"][9]["reason"], "Duplicate");
+    Ok(())
+}
+
+#[tokio::test]
+async fn registrations_pay_for_their_own_storage() -> anyhow::Result<()> {
+    let w = setup(30).await?;
+    let claims = w.history().await?;
+    let before = w.lane.as_account().view_account().await?;
+
+    // Junk registrations from an account with no record: each is refused,
+    // but each still leaves a request on chain.
+    for nonce in 0..5u64 {
+        let r = w.register(&w.eve, 1000 + nonce, 1, &claims, nonce).await;
+        assert!(r.is_success(), "{}", failure_text(&r));
+    }
+    let no_deposit = w.eve
+        .call(w.lane.id(), "register")
+        .args_json(json!({ "proposal_id": 2000, "amount": NEAR.to_string(), "claims": claims, "nonce": 99 }))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(failure_text(&no_deposit).contains("attach 0.01 NEAR"));
+
+    let after = w.lane.as_account().view_account().await?;
+    let used = after.storage_usage - before.storage_usage;
+    let staked = used as u128 * 10u128.pow(19);
+    let paid = 5 * 10u128.pow(22);
+    println!("5 refused requests used {used} bytes ({staked} yocto staked), callers paid {paid}");
+    assert!(staked < paid, "deposits must cover the storage");
+    // The lane ends up with more free balance than it started with, not less.
+    assert!(after.balance.as_yoctonear() >= before.balance.as_yoctonear() + paid - staked - NEAR / 100);
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_expired_proposal_is_refused_not_counted() -> anyhow::Result<()> {
+    let w = setup(30).await?;
+    let claims = w.history().await?;
+    // The DAO's proposals now expire after 20 s, shorter than the 30 s veto window.
+    w.change_policy(json!({ "ChangePolicyUpdateParameters": { "parameters": {
+        "proposal_bond": null, "proposal_period": "20000000000",
+        "bounty_bond": null, "bounty_forgiveness_period": null } } }))
+    .await?;
+
+    let pid = propose(&w.fund, &w.dev, transfer(w.dev.id(), 4)).await?;
+    assert!(w.register(&w.dev, pid, 4, &claims, 1).await.is_success());
+    w.wait(31).await?;
+    let before = w.dev.view_account().await?.balance;
+    let r = w.execute(&w.eve, 0).await;
+    assert!(r.is_success(), "{}", failure_text(&r));
+
+    // The lane's vote succeeds as a call but can't approve an expired
+    // proposal; the lane reads that back instead of assuming success.
+    let req = w.request(0).await?;
+    assert_eq!(status_of(&req), "Refused", "{req}");
+    assert_ne!(status(&w.fund, pid).await?, "Approved");
+    assert!(w.dev.view_account().await?.balance <= before);
+    let usage: Value = w.lane.view("get_usage").args_json(json!({ "account_id": w.dev.id() })).await?.json()?;
+    assert_eq!(usage["used_by_account"], "0");
+    Ok(())
+}
+
+#[tokio::test]
+async fn removing_the_role_switches_the_lane_off() -> anyhow::Result<()> {
+    let w = setup(30).await?;
+    let claims = w.history().await?;
+    let pid = propose(&w.fund, &w.dev, transfer(w.dev.id(), 4)).await?;
+    assert!(w.register(&w.dev, pid, 4, &claims, 1).await.is_success());
+
+    // During the window the DAO removes the lane's role with one proposal.
+    w.change_policy(json!({ "ChangePolicyRemoveRole": { "role": "fastlane" } })).await?;
+
+    w.wait(31).await?;
+    let r = w.execute(&w.eve, 0).await;
+    assert!(r.is_success(), "{}", failure_text(&r));
+    assert_eq!(status_of(&w.request(0).await?), "Refused");
+    assert_eq!(status(&w.fund, pid).await?, "InProgress");
     Ok(())
 }

@@ -3860,6 +3860,7 @@ name = "track-record-integration"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "near-workspaces",
  "serde_json",
  "tokio",
