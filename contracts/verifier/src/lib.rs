@@ -6,13 +6,13 @@
 
 use near_sdk::serde_json::{json, Value};
 use near_sdk::{env, log, near, require, AccountId, Gas, Promise, PromiseOrValue};
-use track_record_rules::chain::{policy_daos, pre_checks, read_claims, read_policy, read_results, verdicts};
+use track_record_rules::chain::{policy_daos, pre_checks, read_claims, read_policy, read_results, verdicts, MAX_POLICY_BYTES, MAX_PROPOSAL_BYTES};
 use track_record_rules::{summarize, Claim, Reject, Rules, Summary};
 
 /// One read per claim, plus one per paying DAO when members are excluded;
 /// kept well under the 300 Tgas limit.
 pub const MAX_CLAIMS: usize = 10;
-const GAS_CALLBACK: Gas = Gas::from_tgas(60);
+const GAS_CALLBACK: Gas = Gas::from_tgas(70);
 
 #[near(serializers = [json])]
 #[derive(Clone, Debug, PartialEq)]
@@ -27,6 +27,9 @@ pub struct ClaimResult {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Attestation {
     pub account_id: AccountId,
+    /// sha256 of the rules as JSON. Anyone can call `verify` with any rules,
+    /// so an attestation only means something for the rules it names.
+    pub rules_hash: String,
     pub results: Vec<ClaimResult>,
     pub summary: Summary,
 }
@@ -79,8 +82,8 @@ impl Verifier {
         rules: Rules,
     ) -> Attestation {
         let n = statics.iter().filter(|v| v.is_none()).count();
-        let raws = read_results(0, n);
-        let policies = read_results(n as u64, policy_daos.len());
+        let raws = read_results(0, n, MAX_PROPOSAL_BYTES);
+        let policies = read_results(n as u64, policy_daos.len(), MAX_POLICY_BYTES);
         attest(account_id, &claims, &statics, &raws, &policy_daos, &policies, &rules)
     }
 }
@@ -104,6 +107,7 @@ pub fn attest(
 
     let valid: Vec<&Claim> = claims.iter().zip(&results).filter(|(_, r)| r.ok).map(|(c, _)| c).collect();
     let summary = summarize(&valid, rules);
+    let rules_hash = rules_hash(rules);
     log!(
         "EVENT_JSON:{}",
         json!({
@@ -112,13 +116,20 @@ pub fn attest(
             "event": "verified",
             "data": [{
                 "account_id": account_id,
+                "rules_hash": rules_hash,
                 "distinct_daos": summary.distinct_daos,
                 "payouts": summary.payouts,
                 "qualifies": summary.qualifies,
             }]
         })
     );
-    Attestation { account_id, results, summary }
+    Attestation { account_id, rules_hash, results, summary }
+}
+
+/// Hex sha256 of the rules' JSON encoding (fields in declaration order).
+pub fn rules_hash(rules: &Rules) -> String {
+    let bytes = near_sdk::serde_json::to_vec(rules).expect("rules serialize");
+    env::sha256(&bytes).iter().map(|b| format!("{b:02x}")).collect()
 }
 
 #[cfg(test)]
