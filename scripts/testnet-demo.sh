@@ -5,6 +5,8 @@
 #   ./scripts/testnet-demo.sh status        # every lane request
 #   ./scripts/testnet-demo.sh execute <id>  # after the veto window; anyone can call it
 #   ./scripts/testnet-demo.sh veto <id>     # as the guardian, during the window
+#   ./scripts/testnet-demo.sh exclude-members true|false
+#                                           # the DAO changes the lane's config by proposal
 #
 # Run ./scripts/testnet-setup.sh first.
 
@@ -50,6 +52,18 @@ case "${1:-}" in
   veto)
     call "$GUARDIAN" "$LANE" veto "{\"id\":$2}" '0 NEAR' '30.0 Tgas'
     view "$LANE" get_request "{\"id\":$2}"
+    ;;
+  exclude-members)
+    # Only the DAO can configure the lane, so this goes through a normal
+    # FunctionCall proposal that the council approves.
+    COUNCIL=${COUNCIL:-$P-council.testnet}
+    cfg=$(view "$LANE" get_config '{}' | python3 -c "import json,sys;c=json.load(sys.stdin);c['rules']['exclude_members']=('${2:-true}'=='true');print(json.dumps({'config':c},separators=(',',':')))")
+    kind="{\"FunctionCall\":{\"receiver_id\":\"$LANE\",\"actions\":[{\"method_name\":\"configure\",\"args\":\"$(printf '%s' "$cfg" | base64 | tr -d '\n')\",\"deposit\":\"0\",\"gas\":\"30000000000000\"}]}}"
+    id=$(view "$FUND" get_last_proposal_id '{}' | tail -1 | tr -d '[:space:]')
+    echo "== $COUNCIL proposes the new config (#$id) and approves it"
+    call "$COUNCIL" "$FUND" add_proposal "{\"proposal\":{\"description\":\"Lane: exclude_members=${2:-true}\",\"kind\":$kind}}" '1 NEAR' '50.0 Tgas'
+    call "$COUNCIL" "$FUND" act_proposal "{\"id\":$id,\"action\":\"VoteApprove\",\"proposal\":$kind}" '0 NEAR' '200.0 Tgas'
+    view "$LANE" get_config '{}' | grep exclude_members
     ;;
   *)
     sed -n '2,10p' "$0"
