@@ -102,15 +102,15 @@ Transactions from the demo run against the current code:
 
 | Step | Transaction |
 | --- | --- |
-| The verifier attests `trackrecord-dev.testnet` (3 payouts from 2 DAOs, members excluded), with the rules hash in the event | [`22DaSfFa…`](https://testnet.nearblocks.io/txns/22DaSfFaYvbqXeAak8ctxcL5hkwqpdatkWj7eX8fDnzn) |
-| The contributor registers a 0.5 NEAR proposal with the lane | [`1kU29bXe…`](https://testnet.nearblocks.io/txns/1kU29bXeBAan1zCTj9LQN312zKtpNjvutK2mHdpskMM) |
-| After the window: the lane votes, and the DAO approves and pays from its treasury | [`BYrpC7iP…`](https://testnet.nearblocks.io/txns/BYrpC7iPmLVXWAqyDNpCckc69CiHtPToBtNe2veLZy5f) |
-| A guardian vetoes a second request on their own | [`2XNku7vf…`](https://testnet.nearblocks.io/txns/2XNku7vf7EH9kRHYAvFRemz7HrLE2hcAZk4cNrf4kpPD) |
-| An account presenting someone else's payouts is refused | [`D49qc5za…`](https://testnet.nearblocks.io/txns/D49qc5za3r5c5ZpgAGu17dbnLD5w1goiikW5epdkUmA2) |
-| `execute` before the window closes is rejected | [`BZ8wLzBo…`](https://testnet.nearblocks.io/txns/BZ8wLzBoMcCukWw7STincamNkD1uJXam3NvA19bdfCEo) |
-| The DAO changes the lane's config through an ordinary proposal | [`96kMT8gj…`](https://testnet.nearblocks.io/txns/96kMT8gjsbbpRzT6fdWqYcriRR3r8Ef98vDCWintULYv) |
-| Anyone else calling `configure` is rejected | [`FRaScwZK…`](https://testnet.nearblocks.io/txns/FRaScwZKLnqVSManNSczZ3u2P7RHfqQFRUf8srAiDd2J) |
-| A registration without the storage deposit is rejected | [`3gZFnto8…`](https://testnet.nearblocks.io/txns/3gZFnto89aGGtHqjhVMaCqVQs4gVQKyTNrbni46bcD4c) |
+| The verifier attests `trackrecord-dev.testnet` (3 payouts from 2 DAOs, members excluded); the `verified` event carries the rules hash | [`ECzBrwtb…`](https://testnet.nearblocks.io/txns/ECzBrwtb3SSPxPdkqBeAQ6chBzTYx3pK6UoakLJ1uA1f) |
+| The contributor registers a 0.1 NEAR proposal with the lane | [`8wNfnRUM…`](https://testnet.nearblocks.io/txns/8wNfnRUMj3VDcBZu9NhQufjPT1Up8ASZv4o34U6ggrQ9) |
+| `execute` before the veto window closes is rejected | [`2dZ2cbTz…`](https://testnet.nearblocks.io/txns/2dZ2cbTz8N4qeZs2PknwLVerZFtHdyXgBGyrQMj4fDLD) |
+| After the window: the lane votes, and the DAO approves and pays from its treasury | [`kMA2pTPf…`](https://testnet.nearblocks.io/txns/kMA2pTPf5izkTdn4Ax4cLqT5hatPohkEzVo8mKLajvb) |
+| A guardian vetoes another request on their own | [`GFqgveXF…`](https://testnet.nearblocks.io/txns/GFqgveXFyJzhdMcEVYQjXsJLEPgqrL9PanjBLwuMWgDk) |
+| An account presenting someone else's payouts is refused | [`QyYsnaj5…`](https://testnet.nearblocks.io/txns/QyYsnaj51SaPct2YDqNtZQjMC1Q4TjJnBqe4VXevE3m) |
+| The DAO changes the lane's config through an ordinary proposal | [`kfgHt7RJ…`](https://testnet.nearblocks.io/txns/kfgHt7RJekFWVUkJwuJZQ1YwX9tQSjEbLEqr2cqAc8c) |
+| Anyone else calling `configure` is rejected | [`soSzfHYV…`](https://testnet.nearblocks.io/txns/soSzfHYVAqzeVzGPr9jABhKhZZa7dYQHpJnrekpVkfX) |
+| A registration without the storage deposit is rejected | [`4oHmVpfC…`](https://testnet.nearblocks.io/txns/4oHmVpfCRXTtA9bBJaPZrXQz7z8AmaMkQhcSh22oSbqh) |
 
 To run the whole thing yourself on testnet with free faucet accounts, read [`scripts/testnet-setup.sh`](scripts/testnet-setup.sh) and [`scripts/testnet-demo.sh`](scripts/testnet-demo.sh); `PREFIX=yourname` gives you your own copies.
 
