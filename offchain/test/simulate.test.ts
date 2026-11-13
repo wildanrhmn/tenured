@@ -76,6 +76,19 @@ describe("simulate", () => {
   });
 });
 
+describe("exclude_members", () => {
+  it("drops payouts to members of the paying DAO, using the snapshot's policies", () => {
+    const payouts = [pay(A, 0, "boss.near", 50, 1), pay(B, 0, "boss.near", 50, 1), pay(A, 1, "boss.near", 50, 2), pay(FUND, 0, "boss.near", 40, 5)];
+    const daos = [
+      { dao: A, groups: { council: ["boss.near"] } },
+      { dao: B, groups: { council: ["other.near"] } },
+    ];
+    const rules = { ...cfg().rules, exclude_members: true };
+    expect(simulate({ payouts, daos: daos as never }, cfg()).fast_laned).toBe(1);
+    expect(simulate({ payouts, daos: daos as never }, cfg({ rules })).fast_laned).toBe(0);
+  });
+});
+
 describe("discoverClaims", () => {
   it("prefers distinct DAOs and caps at nine claims", () => {
     const payouts = [

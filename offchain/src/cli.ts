@@ -8,11 +8,10 @@
 // paying DAOs live over RPC and applies the same rules as the verifier
 // contract, so anyone can check a mainnet record without deploying anything.
 
-import { MAINNET_RPCS, TESTNET_RPCS, RpcPool, ViewError } from "./rpc.js";
-import { checkProposal, staticChecks, summarize, type Claim, type Rules } from "./rules.js";
+import { verifyLive } from "./api.js";
+import { summarize, type Claim, type Rules } from "./rules.js";
 import { discoverClaims, simulate, suggestTrusted, type SimConfig } from "./simulate.js";
 import { loadSnapshot } from "./snapshot.js";
-import { MAINNET_FACTORY, NO_CODE_HASH, TESTNET_FACTORY, type ContractMetadata } from "./sputnik.js";
 
 // Common payout tokens on mainnet, so flags can use short names.
 export const TOKENS: Record<string, { id: string; decimals: number }> = {
@@ -71,6 +70,7 @@ export function defaultRules(trusted: string[], f: Flags = {}): Rules {
     ],
     min_distinct_daos: Number(flag(f, "min-daos", "2")),
     min_payouts: Number(flag(f, "min-payouts", "3")),
+    exclude_members: f["exclude-members"] === true,
   };
 }
 
@@ -105,7 +105,6 @@ async function cmdVerify(pos: string[], f: Flags) {
   const account = pos[0];
   if (!account) throw new Error("usage: verify <account> --trust-like <dao> [--claims dao#id,...]");
   const testnet = flag(f, "network", "mainnet") === "testnet";
-  const factory = testnet ? TESTNET_FACTORY : MAINNET_FACTORY;
   const rules = defaultRules(await trusted(f), f);
   let claims: Claim[];
   if (typeof f.claims === "string") {
@@ -118,46 +117,15 @@ async function cmdVerify(pos: string[], f: Flags) {
   }
   if (claims.length === 0) throw new Error("no claims to verify");
 
-  const rpc = new RpcPool(testnet ? TESTNET_RPCS : MAINNET_RPCS);
-  const statics = staticChecks(claims, rules, factory);
-  const results: (Claim & { ok: boolean; reason: string | null })[] = [];
-  for (const [i, c] of claims.entries()) {
-    let reason = statics[i] ?? null;
-    if (!reason) {
-      let raw: unknown = null;
-      try {
-        raw = await rpc.view(c.dao_id, "get_proposal", { id: c.proposal_id });
-      } catch (e) {
-        if (!(e instanceof ViewError && e.kind === "contract")) throw e;
-      }
-      reason = checkProposal(raw, account, rules);
-    }
-    results.push({ ...c, ok: reason === null, reason });
-  }
-  const s = summarize(results.filter((r) => r.ok), rules);
-
-  // RULES.md §8: contracts can't see code hashes, so the CLI checks that each
-  // paying DAO still runs a Sputnik version its factory published.
-  const published = new Map(
-    (await rpc.view<ContractMetadata[]>(factory, "get_contracts_metadata").catch(() => [] as ContractMetadata[])).map(
-      ([hash, m]) => [hash, m.version.join(".")],
-    ),
-  );
-  const code: Record<string, string> = {};
-  for (const dao of new Set(results.filter((r) => r.ok).map((r) => r.dao_id))) {
-    const hash = await rpc.codeHash(dao);
-    code[dao] = hash === NO_CODE_HASH ? "none" : (published.get(hash) ?? "custom");
-  }
-  const warnings = Object.entries(code)
-    .filter(([, v]) => v === "none" || v === "custom")
-    .map(([dao, v]) => `${dao} runs ${v === "none" ? "no contract" : "code its factory never published"}; trust it with care (RULES.md §8)`);
+  const { results, summary: s, code_versions: code, warnings } = await verifyLive(account, claims, rules, testnet ? "testnet" : "mainnet");
+  const published = Object.keys(code).length > 0;
 
   out(f, { account_id: account, results, summary: s, code_versions: code, warnings }, () =>
     [
       `${account} on ${testnet ? "testnet" : "mainnet"}, read live from each DAO:`,
       ...results.map((r) => `  ${r.ok ? "ok " : "no "} ${r.dao_id}#${r.proposal_id}${r.reason ? `  (${r.reason})` : ""}`),
       `${s.payouts} valid payouts from ${s.distinct_daos} DAOs: ${s.qualifies ? "qualifies" : "does not qualify"}`,
-      ...Object.entries(code).map(([dao, v]) => `  code: ${dao} = ${published.size ? `Sputnik ${v}` : v}`),
+      ...Object.entries(code).map(([dao, v]) => `  code: ${dao} = ${published && v !== "custom" && v !== "none" ? `Sputnik ${v}` : v}`),
       ...warnings.map((w) => `warning: ${w}`),
     ].join("\n"),
   );
@@ -199,7 +167,8 @@ const HELP = `track-record <command>
   simulate <dao> [--token near|usdc|usdt|...] [--cap 500] [--budget 2000] [--period-days 30]
 
   common:  --trust a,b,c   explicit trusted DAOs     --min-daos 2   --min-payouts 3
-           --min-near 1    smallest NEAR payout that counts                 --json`;
+           --min-near 1    smallest NEAR payout that counts
+           --exclude-members   don't count payouts to members of the paying DAO   --json`;
 
 async function main() {
   const { cmd, pos, flags } = parse(process.argv.slice(2));

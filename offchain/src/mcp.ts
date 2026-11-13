@@ -49,10 +49,18 @@ server.registerTool(
       trusted_daos: z.array(z.string()).min(1),
       network: z.enum(["mainnet", "testnet"]).default("mainnet"),
       min_near: z.string().default("1").describe("smallest NEAR payout that counts"),
+      exclude_members: z.boolean().default(false).describe("don't count payouts to members of the paying DAO"),
     },
   },
-  async ({ account, claims, trusted_daos, network, min_near }) =>
-    json(await verifyLive(account, claims, defaultRules(trusted_daos, { "min-near": min_near }), network)),
+  async ({ account, claims, trusted_daos, network, min_near, exclude_members }) =>
+    json(
+      await verifyLive(
+        account,
+        claims,
+        defaultRules(trusted_daos, { "min-near": min_near, ...(exclude_members ? { "exclude-members": true as const } : {}) }),
+        network,
+      ),
+    ),
 );
 
 server.registerTool(
@@ -69,10 +77,11 @@ server.registerTool(
       budget: z.string().default("2000"),
       period_days: z.number().int().positive().default(30),
       trusted_daos: z.array(z.string()).optional(),
+      exclude_members: z.boolean().default(false).describe("don't count payouts to members of the paying DAO"),
     },
   },
-  async ({ dao, token, cap, budget, period_days, trusted_daos }) =>
-    json(await simulateDao(dao, { token, cap, budget, period_days, trusted: trusted_daos })),
+  async ({ dao, token, cap, budget, period_days, trusted_daos, exclude_members }) =>
+    json(await simulateDao(dao, { token, cap, budget, period_days, trusted: trusted_daos, exclude_members })),
 );
 
 server.registerTool(

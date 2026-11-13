@@ -3,8 +3,8 @@
 
 import { defaultRules, TOKENS, units } from "./cli.js";
 import { MAINNET_RPCS, TESTNET_RPCS, RpcPool, ViewError } from "./rpc.js";
-import { checkProposal, staticChecks, summarize, type Claim, type Reject, type Rules, type Summary } from "./rules.js";
-import { discoverClaims, MAX_CLAIMS, simulate, suggestTrusted, type SimConfig, type SimResult } from "./simulate.js";
+import { checkClaim, staticChecks, summarize, type Claim, type Reject, type Rules, type Summary } from "./rules.js";
+import { discoverClaims, MAX_CLAIMS, membersOf, simulate, suggestTrusted, type SimConfig, type SimResult } from "./simulate.js";
 import { loadSnapshot } from "./snapshot.js";
 import { MAINNET_FACTORY, NO_CODE_HASH, TESTNET_FACTORY, type ContractMetadata, type Proposal } from "./sputnik.js";
 
@@ -29,17 +29,22 @@ export async function verifyLive(account: string, claims: Claim[], rules: Rules,
   const rpc = rpcFor(network);
   const factory = factoryFor(network);
   const statics = staticChecks(claims, rules, factory);
+  const policies = new Map<string, unknown>();
+  const readOrNull = async (dao: string, method: string, args: object) => {
+    try {
+      return await rpc.view(dao, method, args);
+    } catch (e) {
+      if (!(e instanceof ViewError && e.kind === "contract")) throw e;
+      return null;
+    }
+  };
   const results: ClaimCheck[] = [];
   for (const [i, c] of claims.entries()) {
     let reason = statics[i] ?? null;
     if (!reason) {
-      let raw: unknown = null;
-      try {
-        raw = await rpc.view(c.dao_id, "get_proposal", { id: c.proposal_id });
-      } catch (e) {
-        if (!(e instanceof ViewError && e.kind === "contract")) throw e;
-      }
-      reason = checkProposal(raw, account, rules);
+      const raw = await readOrNull(c.dao_id, "get_proposal", { id: c.proposal_id });
+      if (rules.exclude_members && !policies.has(c.dao_id)) policies.set(c.dao_id, await readOrNull(c.dao_id, "get_policy", {}));
+      reason = checkClaim(raw, policies.get(c.dao_id), account, rules);
     }
     results.push({ ...c, ok: reason === null, reason });
   }
@@ -73,10 +78,11 @@ export async function scanClaims(account: string, daos: string[], rules: Rules, 
   const found: { claim: Claim; time: bigint }[] = [];
   for (const dao of daos) {
     const last = await rpc.view<number>(dao, "get_last_proposal_id").catch(() => 0);
+    const policy = rules.exclude_members ? await rpc.view(dao, "get_policy").catch(() => null) : undefined;
     for (let from = 0; from < last; from += 100) {
       const page = await rpc.view<Proposal[]>(dao, "get_proposals", { from_index: from, limit: 100 });
       for (const p of page) {
-        if (checkProposal(p, account, rules) === null) {
+        if (checkClaim(p, policy, account, rules) === null) {
           found.push({ claim: { dao_id: dao, proposal_id: p.id }, time: BigInt(p.submission_time) });
         }
       }
@@ -93,7 +99,7 @@ export async function scanClaims(account: string, daos: string[], rules: Rules, 
 
 export async function findClaims(account: string, trusted: string[], rules: Rules): Promise<{ claims: Claim[]; summary: Summary; snapshot: string }> {
   const snap = await loadSnapshot();
-  const claims = discoverClaims(snap.payouts, account, { ...rules, trusted_daos: trusted });
+  const claims = discoverClaims(snap.payouts, account, { ...rules, trusted_daos: trusted }, undefined, membersOf(snap.daos));
   return { claims, summary: summarize(claims, rules), snapshot: snap.crawled_to };
 }
 
@@ -103,7 +109,16 @@ export async function suggestTrust(dao: string, count = 10): Promise<string[]> {
 
 export async function simulateDao(
   dao: string,
-  opts: { token?: string; cap?: string; budget?: string; period_days?: number; trusted?: string[]; min_daos?: number; min_payouts?: number } = {},
+  opts: {
+    token?: string;
+    cap?: string;
+    budget?: string;
+    period_days?: number;
+    trusted?: string[];
+    min_daos?: number;
+    min_payouts?: number;
+    exclude_members?: boolean;
+  } = {},
 ): Promise<{ config: SimConfig; result: SimResult }> {
   const snap = await loadSnapshot();
   const token = TOKENS[opts.token ?? "near"];
@@ -112,6 +127,7 @@ export async function simulateDao(
   const rules = defaultRules(trusted, {
     "min-daos": String(opts.min_daos ?? 2),
     "min-payouts": String(opts.min_payouts ?? 3),
+    ...(opts.exclude_members ? { "exclude-members": true as const } : {}),
   });
   const config: SimConfig = {
     dao,

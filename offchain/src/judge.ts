@@ -4,7 +4,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { MAINNET_RPCS, TESTNET_RPCS, RpcPool, ViewError } from "./rpc.js";
-import { checkProposal, staticChecks, summarize, type Claim } from "./rules.js";
+import { checkClaim, checkProposal, staticChecks, summarize, type Claim } from "./rules.js";
 import { buildReport, REPORT } from "./report.js";
 import { loadSnapshot } from "./snapshot.js";
 import { TESTNET_FACTORY } from "./sputnik.js";
@@ -44,6 +44,10 @@ check("TypeScript rules match the Rust rules on fixtures/claims.json", async () 
   }
   for (const c of f.proposal_cases) {
     if (checkProposal(c.proposal, c.claimant, f.rules) !== c.expect) throw new Error(c.name);
+    n++;
+  }
+  for (const c of f.member_cases) {
+    if (checkClaim(f.member_proposal, c.policy, c.claimant, { ...f.rules, exclude_members: c.exclude_members }) !== c.expect) throw new Error(c.name);
     n++;
   }
   for (const c of f.summary_cases) {

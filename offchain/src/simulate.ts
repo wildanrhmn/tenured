@@ -35,17 +35,26 @@ export type SimResult = {
 
 const sec = (p: Payout) => Number(BigInt(p.time_ns) / 1_000_000_000n);
 
-function counts(p: Payout, rules: Rules): boolean {
+/// Group-role members of each DAO, from the snapshot (current policies).
+export type Members = Map<string, Set<string>>;
+
+export function membersOf(daos: { dao: string; groups: Record<string, string[]> }[] | undefined): Members {
+  return new Map((daos ?? []).map((d) => [d.dao, new Set(Object.values(d.groups).flat())]));
+}
+
+function counts(p: Payout, rules: Rules, members?: Members): boolean {
   if (p.path !== "transfer" || !rules.trusted_daos.includes(p.dao)) return false;
+  // Same as the contracts: with no policy on record a member check can only reject.
+  if (rules.exclude_members && (!members?.has(p.dao) || members.get(p.dao)!.has(p.receiver))) return false;
   const floor: TokenFloor | undefined = rules.tokens.find((f) => f.token_id === p.token);
   return !!floor && /^[0-9]+$/.test(p.amount) && BigInt(p.amount) >= BigInt(floor.min_amount);
 }
 
 /// The best claims an account could present right now: as many distinct
 /// DAOs as possible first, then the most recent payouts, at most `MAX_CLAIMS`.
-export function discoverClaims(payouts: Payout[], account: string, rules: Rules, before?: number): Claim[] {
+export function discoverClaims(payouts: Payout[], account: string, rules: Rules, before?: number, members?: Members): Claim[] {
   const mine = payouts
-    .filter((p) => p.receiver === account && counts(p, rules) && (before === undefined || sec(p) < before))
+    .filter((p) => p.receiver === account && counts(p, rules, members) && (before === undefined || sec(p) < before))
     .sort((a, b) => sec(b) - sec(a));
   const picked: Payout[] = [];
   const daos = new Set<string>();
@@ -67,7 +76,8 @@ export function suggestTrusted(payouts: Payout[], dao: string, limit = 10): stri
   return [dao, ...ranked.slice(0, limit - 1).map(([d]) => d)];
 }
 
-export function simulate(snap: Pick<Snapshot, "payouts">, cfg: SimConfig): SimResult {
+export function simulate(snap: Pick<Snapshot, "payouts"> & Partial<Pick<Snapshot, "daos">>, cfg: SimConfig): SimResult {
+  const members = membersOf(snap.daos);
   const cap = BigInt(cfg.per_account_cap);
   const budget = BigInt(cfg.period_budget);
   const targets = snap.payouts
@@ -108,7 +118,7 @@ export function simulate(snap: Pick<Snapshot, "payouts">, cfg: SimConfig): SimRe
 
     // Only history from before this payout counts, and the lane reads at
     // most MAX_CLAIMS of it.
-    const claims = discoverClaims(snap.payouts, p.receiver, cfg.rules, sec(p));
+    const claims = discoverClaims(snap.payouts, p.receiver, cfg.rules, sec(p), members);
     if (!summarize(claims, cfg.rules).qualifies) {
       res.not_qualified++;
       continue;

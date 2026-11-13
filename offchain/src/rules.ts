@@ -9,6 +9,8 @@ export type Rules = {
   tokens: TokenFloor[];
   min_distinct_daos: number;
   min_payouts: number;
+  // RULES.md §1 rule 9: don't count payouts to members of the paying DAO.
+  exclude_members?: boolean;
 };
 export type Reject =
   | "NotFactoryDao"
@@ -20,7 +22,8 @@ export type Reject =
   | "NotTransfer"
   | "WrongReceiver"
   | "TokenNotCounted"
-  | "BelowFloor";
+  | "BelowFloor"
+  | "DaoMember";
 export type Summary = { distinct_daos: number; payouts: number; qualifies: boolean };
 
 export function isFactoryDao(daoId: string, factory: string): boolean {
@@ -61,6 +64,25 @@ export function checkProposal(raw: unknown, claimant: string, rules: Rules): Rej
   if (!floor) return "TokenNotCounted";
   if (!isDecimal(tr.amount) || !isDecimal(floor.min_amount)) return "Unreadable";
   if (BigInt(tr.amount) < BigInt(floor.min_amount)) return "BelowFloor";
+  return null;
+}
+
+/// Whether `account` is in any Group role of a `get_policy` response.
+export function isMember(policy: unknown, account: string): boolean {
+  const roles = (policy as { roles?: unknown } | null)?.roles;
+  if (!Array.isArray(roles)) return false;
+  return roles.some((r) => {
+    const g = (r as { kind?: { Group?: unknown } })?.kind?.Group;
+    return Array.isArray(g) && g.includes(account);
+  });
+}
+
+/// Rules 3 to 7, then rule 9 when members are excluded. A missing policy
+/// counts as membership, so a failed read can only reject.
+export function checkClaim(raw: unknown, policy: unknown, claimant: string, rules: Rules): Reject | null {
+  const r = checkProposal(raw, claimant, rules);
+  if (r) return r;
+  if (rules.exclude_members && (policy === undefined || policy === null || isMember(policy, claimant))) return "DaoMember";
   return null;
 }
 
