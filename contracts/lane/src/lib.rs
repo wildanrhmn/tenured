@@ -11,12 +11,13 @@ use near_sdk::json_types::U128;
 use near_sdk::serde_json::{json, Value};
 use near_sdk::store::{LookupMap, LookupSet, Vector};
 use near_sdk::{env, log, near, require, AccountId, Gas, NearToken, Promise};
-use track_record_rules::chain::{pre_checks, read_claims, read_proposal, read_results, verdicts};
+use track_record_rules::chain::{policy_daos, pre_checks, read_claims, read_policy, read_proposal, read_results, verdicts};
 use track_record_rules::{parse_proposal, summarize, Claim, Reject, Rules, Transfer};
 
-/// One read for the proposal itself plus one per claim.
+/// One read for the proposal itself, one per claim, and one per paying DAO
+/// when members are excluded: at most 19 reads of 8 Tgas.
 pub const MAX_CLAIMS: usize = 9;
-const GAS_ON_REGISTERED: Gas = Gas::from_tgas(60);
+const GAS_ON_REGISTERED: Gas = Gas::from_tgas(80);
 const GAS_ACT: Gas = Gas::from_tgas(120);
 const GAS_ON_EXECUTED: Gas = Gas::from_tgas(20);
 const NS: u64 = 1_000_000_000;
@@ -153,30 +154,34 @@ impl Lane {
         self.by_proposal.insert(proposal_id, id);
 
         let statics = pre_checks(&claims, &self.config.rules, self.factory.as_str());
+        let daos = policy_daos(&claims, &statics, &self.config.rules);
         read_claims(&claims, &statics)
             .into_iter()
+            .chain(daos.iter().map(|d| read_policy(d)))
             .fold(read_proposal(self.dao.clone(), proposal_id), Promise::and)
             .then(
                 Self::ext(env::current_account_id())
                     .with_static_gas(GAS_ON_REGISTERED)
-                    .on_registered(id, claims, statics),
+                    .on_registered(id, claims, statics, daos),
             )
     }
 
     #[private]
-    pub fn on_registered(&mut self, id: u64, claims: Vec<Claim>, statics: Vec<Option<Reject>>) -> Status {
+    pub fn on_registered(&mut self, id: u64, claims: Vec<Claim>, statics: Vec<Option<Reject>>, policy_daos: Vec<String>) -> Status {
         let mut req = self.request_mut(id).clone();
         require!(req.status == Status::Checking, "request is not being checked");
 
+        // Results: [own proposal, claims that passed pre_checks..., policies...]
         let n_reads = statics.iter().filter(|v| v.is_none()).count();
-        let mut raws = read_results(0, 1 + n_reads);
-        let own = raws.remove(0);
+        let own = read_results(0, 1).pop().flatten();
+        let raws = read_results(1, n_reads);
+        let policies = read_results(1 + n_reads as u64, policy_daos.len());
 
         if let Err(reason) = self.check_own_proposal(own.as_ref(), &req) {
             return self.refuse(id, reason);
         }
 
-        let verdicts = verdicts(req.account_id.as_str(), &statics, &raws, &self.config.rules);
+        let verdicts = verdicts(req.account_id.as_str(), &claims, &statics, &raws, &policy_daos, &policies, &self.config.rules);
         let valid: Vec<&Claim> = claims.iter().zip(&verdicts).filter(|(_, v)| v.is_none()).map(|(c, _)| c).collect();
         let summary = summarize(&valid, &self.config.rules);
         if !summary.qualifies {
@@ -395,6 +400,7 @@ mod tests {
                 tokens: vec![track_record_rules::TokenFloor { token_id: "".into(), min_amount: "1".into() }],
                 min_distinct_daos: 1,
                 min_payouts: 1,
+                exclude_members: false,
             },
             pay_token: "".into(),
             per_account_cap: U128(100),

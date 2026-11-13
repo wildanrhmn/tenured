@@ -397,3 +397,45 @@ async fn verifier_attests_from_the_daos_own_records() -> anyhow::Result<()> {
     let _ = &w.factory;
     Ok(())
 }
+
+#[tokio::test]
+async fn councils_paying_themselves_can_be_excluded() -> anyhow::Result<()> {
+    let w = setup(30).await?;
+    let dev_claims = w.history().await?;
+    // The council member pays themselves from both DAOs they sit on.
+    let c0 = paid(&w.alpha, &w.council, &w.council, 2).await?;
+    let c1 = paid(&w.alpha, &w.council, &w.council, 2).await?;
+    let c2 = paid(&w.beta, &w.council, &w.council, 2).await?;
+    let council_claims = json!([
+        { "dao_id": w.alpha.id(), "proposal_id": c0 },
+        { "dao_id": w.alpha.id(), "proposal_id": c1 },
+        { "dao_id": w.beta.id(), "proposal_id": c2 },
+    ]);
+    let rules = |exclude: bool| {
+        json!({
+            "trusted_daos": [w.alpha.id(), w.beta.id()],
+            "tokens": [{ "token_id": "", "min_amount": NEAR.to_string() }],
+            "min_distinct_daos": 2,
+            "min_payouts": 3,
+            "exclude_members": exclude,
+        })
+    };
+    let verify = |who: &Account, claims: &Value, exclude: bool| {
+        let args = json!({ "account_id": who.id(), "claims": claims, "rules": rules(exclude) });
+        w.eve.call(w.verifier.id(), "verify").args_json(args).max_gas().transact()
+    };
+
+    let a: Value = verify(&w.council, &council_claims, false).await?.into_result()?.json()?;
+    assert_eq!(a["summary"]["qualifies"], true, "self-payments count when the rule is off: {a}");
+
+    let r = verify(&w.council, &council_claims, true).await?;
+    println!("verify with 3 claims and 2 policy reads burnt {} Tgas", r.total_gas_burnt.as_tgas());
+    let a: Value = r.into_result()?.json()?;
+    assert_eq!(a["summary"]["qualifies"], false, "{a}");
+    assert!(a["results"].as_array().unwrap().iter().all(|r| r["reason"] == "DaoMember"));
+
+    // An outside contributor is unaffected.
+    let a: Value = verify(&w.dev, &dev_claims, true).await?.into_result()?.json()?;
+    assert_eq!(a["summary"]["qualifies"], true, "{a}");
+    Ok(())
+}

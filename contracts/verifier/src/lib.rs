@@ -6,12 +6,13 @@
 
 use near_sdk::serde_json::{json, Value};
 use near_sdk::{env, log, near, require, AccountId, Gas, Promise, PromiseOrValue};
-use track_record_rules::chain::{pre_checks, read_claims, read_results, verdicts};
+use track_record_rules::chain::{policy_daos, pre_checks, read_claims, read_policy, read_results, verdicts};
 use track_record_rules::{summarize, Claim, Reject, Rules, Summary};
 
-/// One cross-contract read per claim; kept well under the 300 Tgas limit.
+/// One read per claim, plus one per paying DAO when members are excluded;
+/// kept well under the 300 Tgas limit.
 pub const MAX_CLAIMS: usize = 10;
-const GAS_CALLBACK: Gas = Gas::from_tgas(30);
+const GAS_CALLBACK: Gas = Gas::from_tgas(60);
 
 #[near(serializers = [json])]
 #[derive(Clone, Debug, PartialEq)]
@@ -54,14 +55,16 @@ impl Verifier {
         require!(claims.len() <= MAX_CLAIMS, "too many claims");
 
         let statics = pre_checks(&claims, &rules, self.factory.as_str());
-        let Some(reads) = read_claims(&claims, &statics).into_iter().reduce(Promise::and) else {
-            return PromiseOrValue::Value(attest(account_id, &claims, &statics, &[], &rules));
+        let daos = policy_daos(&claims, &statics, &rules);
+        let reads = read_claims(&claims, &statics).into_iter().chain(daos.iter().map(|d| read_policy(d)));
+        let Some(reads) = reads.reduce(Promise::and) else {
+            return PromiseOrValue::Value(attest(account_id, &claims, &statics, &[], &[], &[], &rules));
         };
         reads
             .then(
                 Self::ext(env::current_account_id())
                     .with_static_gas(GAS_CALLBACK)
-                    .on_read(account_id, claims, statics, rules),
+                    .on_read(account_id, claims, statics, daos, rules),
             )
             .into()
     }
@@ -72,24 +75,30 @@ impl Verifier {
         account_id: AccountId,
         claims: Vec<Claim>,
         statics: Vec<Option<Reject>>,
+        policy_daos: Vec<String>,
         rules: Rules,
     ) -> Attestation {
-        let raws = read_results(0, statics.iter().filter(|v| v.is_none()).count());
-        attest(account_id, &claims, &statics, &raws, &rules)
+        let n = statics.iter().filter(|v| v.is_none()).count();
+        let raws = read_results(0, n);
+        let policies = read_results(n as u64, policy_daos.len());
+        attest(account_id, &claims, &statics, &raws, &policy_daos, &policies, &rules)
     }
 }
 
-/// Combines static verdicts with the proposals read for the remaining claims.
+/// Combines static verdicts with the proposals (and policies) read for the
+/// remaining claims.
 pub fn attest(
     account_id: AccountId,
     claims: &[Claim],
     statics: &[Option<Reject>],
     raws: &[Option<Value>],
+    policy_daos: &[String],
+    policies: &[Option<Value>],
     rules: &Rules,
 ) -> Attestation {
     let results: Vec<ClaimResult> = claims
         .iter()
-        .zip(verdicts(account_id.as_str(), statics, raws, rules))
+        .zip(verdicts(account_id.as_str(), claims, statics, raws, policy_daos, policies, rules))
         .map(|(c, reason)| ClaimResult { dao_id: c.dao_id.clone(), proposal_id: c.proposal_id, ok: reason.is_none(), reason })
         .collect();
 
@@ -122,6 +131,7 @@ mod tests {
             tokens: vec![track_record_rules::TokenFloor { token_id: "".into(), min_amount: "10".into() }],
             min_distinct_daos: 2,
             min_payouts: 2,
+            exclude_members: false,
         }
     }
 
@@ -151,16 +161,35 @@ mod tests {
         let statics = pre_checks(&claims, &rules(), "sputnikv2.testnet");
         assert_eq!(statics, vec![None, Some(Reject::NotTrusted), None]);
         let raws = vec![Some(approved("dev.testnet", "50")), Some(approved("dev.testnet", "50"))];
-        let a = attest("dev.testnet".parse().unwrap(), &claims, &statics, &raws, &rules());
+        let a = attest("dev.testnet".parse().unwrap(), &claims, &statics, &raws, &[], &[], &rules());
         assert_eq!(a.results.iter().map(|r| r.ok).collect::<Vec<_>>(), vec![true, false, true]);
         assert_eq!(a.summary, Summary { distinct_daos: 2, payouts: 2, qualifies: true });
+    }
+
+    #[test]
+    fn members_are_excluded_when_asked() {
+        let claims = vec![
+            Claim { dao_id: "a.sputnikv2.testnet".into(), proposal_id: 1 },
+            Claim { dao_id: "b.sputnikv2.testnet".into(), proposal_id: 2 },
+        ];
+        let rules = Rules { exclude_members: true, ..rules() };
+        let statics = pre_checks(&claims, &rules, "sputnikv2.testnet");
+        let daos = policy_daos(&claims, &statics, &rules);
+        assert_eq!(daos, vec!["a.sputnikv2.testnet".to_string(), "b.sputnikv2.testnet".to_string()]);
+        let raws = vec![Some(approved("dev.testnet", "50")), Some(approved("dev.testnet", "50"))];
+        let council = json!({ "roles": [{ "name": "council", "kind": { "Group": ["dev.testnet"] } }] });
+        let outsider = json!({ "roles": [{ "name": "council", "kind": { "Group": ["boss.testnet"] } }] });
+        let a = attest("dev.testnet".parse().unwrap(), &claims, &statics, &raws, &daos, &[Some(council), Some(outsider)], &rules);
+        assert_eq!(a.results[0].reason, Some(Reject::DaoMember));
+        assert!(a.results[1].ok);
+        assert!(!a.summary.qualifies);
     }
 
     #[test]
     fn a_failed_read_counts_as_not_found() {
         let claims = vec![Claim { dao_id: "a.sputnikv2.testnet".into(), proposal_id: 99 }];
         let statics = pre_checks(&claims, &rules(), "sputnikv2.testnet");
-        let a = attest("dev.testnet".parse().unwrap(), &claims, &statics, &[None], &rules());
+        let a = attest("dev.testnet".parse().unwrap(), &claims, &statics, &[None], &[], &[], &rules());
         assert_eq!(a.results[0].reason, Some(Reject::NotFound));
         assert!(!a.summary.qualifies);
     }

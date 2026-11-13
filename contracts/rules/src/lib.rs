@@ -36,6 +36,10 @@ pub struct Rules {
     pub tokens: Vec<TokenFloor>,
     pub min_distinct_daos: u32,
     pub min_payouts: u32,
+    /// Don't count payouts to members of the paying DAO's group roles
+    /// (councils paying themselves). Costs one policy read per paying DAO.
+    #[serde(default)]
+    pub exclude_members: bool,
 }
 
 /// Why a claim didn't count. Names match `fixtures/claims.json`.
@@ -51,6 +55,9 @@ pub enum Reject {
     WrongReceiver,
     TokenNotCounted,
     BelowFloor,
+    /// The receiver is in one of the paying DAO's group roles (or its
+    /// policy couldn't be read), and the rules exclude members.
+    DaoMember,
 }
 
 /// A Sputnik `Transfer` proposal, as the contracts need it.
@@ -146,6 +153,31 @@ pub fn check_proposal(raw: Option<&Value>, claimant: &str, rules: &Rules) -> Res
     Ok(())
 }
 
+/// Whether `account` is in any `Group` role of a `get_policy` response.
+/// Membership is read from the DAO's current policy, not the policy at the
+/// time of the payout.
+pub fn is_member(policy: &Value, account: &str) -> bool {
+    policy
+        .get("roles")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|r| r.get("kind").and_then(|k| k.get("Group")).and_then(Value::as_array))
+        .flatten()
+        .any(|m| m.as_str() == Some(account))
+}
+
+/// Rule 9 on top of rules 3 to 7: when the rules exclude members, a valid
+/// payout to a member of the paying DAO doesn't count. An unreadable policy
+/// counts as membership, so a failed read can only ever reject.
+pub fn check_claim(raw: Option<&Value>, policy: Option<&Value>, claimant: &str, rules: &Rules) -> Result<(), Reject> {
+    check_proposal(raw, claimant, rules)?;
+    if rules.exclude_members && policy.map_or(true, |p| is_member(p, claimant)) {
+        return Err(Reject::DaoMember);
+    }
+    Ok(())
+}
+
 #[cfg_attr(feature = "near", derive(near_sdk::borsh::BorshSerialize, near_sdk::borsh::BorshDeserialize))]
 #[cfg_attr(feature = "near", borsh(crate = "near_sdk::borsh"))]
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -178,7 +210,7 @@ pub mod chain {
     /// Gas for one `get_proposal` read on a paying DAO.
     pub const GAS_PER_READ: Gas = Gas::from_tgas(8);
 
-    /// Largest `get_proposal` response we read. Bounding it stops a hostile
+    /// Largest `get_proposal` or `get_policy` response we read. Bounding it stops a hostile
     /// DAO from burning the callback's gas with an enormous description.
     pub const MAX_PROPOSAL_BYTES: usize = 64 * 1024;
 
@@ -224,14 +256,51 @@ pub mod chain {
             .collect()
     }
 
-    /// Per-claim verdicts: static ones, then the proposals read for the rest.
-    pub fn verdicts(claimant: &str, statics: &[Option<Reject>], raws: &[Option<Value>], rules: &Rules) -> Vec<Option<Reject>> {
+    /// DAOs whose policy must be read: the distinct DAOs of claims still
+    /// open after `pre_checks`, in first-seen order. Empty unless the rules
+    /// exclude members.
+    pub fn policy_daos(claims: &[Claim], statics: &[Option<Reject>], rules: &Rules) -> Vec<String> {
+        let mut daos: Vec<String> = Vec::new();
+        if rules.exclude_members {
+            for (c, v) in claims.iter().zip(statics) {
+                if v.is_none() && !daos.contains(&c.dao_id) {
+                    daos.push(c.dao_id.clone());
+                }
+            }
+        }
+        daos
+    }
+
+    pub fn read_policy(dao: &str) -> Promise {
+        Promise::new(dao.parse().expect("checked in pre_checks")).function_call(
+            "get_policy".to_string(),
+            b"{}".to_vec(),
+            NearToken::from_yoctonear(0),
+            GAS_PER_READ,
+        )
+    }
+
+    /// Per-claim verdicts: static ones, then the proposals read for the
+    /// rest, then membership against the policies read for `policy_daos`.
+    pub fn verdicts(
+        claimant: &str,
+        claims: &[Claim],
+        statics: &[Option<Reject>],
+        raws: &[Option<Value>],
+        policy_daos: &[String],
+        policies: &[Option<Value>],
+        rules: &Rules,
+    ) -> Vec<Option<Reject>> {
         let mut raws = raws.iter();
-        statics
+        claims
             .iter()
-            .map(|verdict| match verdict {
+            .zip(statics)
+            .map(|(c, verdict)| match verdict {
                 Some(r) => Some(*r),
-                None => check_proposal(raws.next().and_then(|v| v.as_ref()), claimant, rules).err(),
+                None => {
+                    let policy = policy_daos.iter().position(|d| d == &c.dao_id).and_then(|i| policies.get(i)?.as_ref());
+                    check_claim(raws.next().and_then(|v| v.as_ref()), policy, claimant, rules).err()
+                }
             })
             .collect()
     }
@@ -247,6 +316,8 @@ mod tests {
         rules: Rules,
         static_cases: Vec<StaticCase>,
         proposal_cases: Vec<ProposalCase>,
+        member_cases: Vec<MemberCase>,
+        member_proposal: Value,
         summary_cases: Vec<SummaryCase>,
     }
 
@@ -262,6 +333,15 @@ mod tests {
         name: String,
         claimant: String,
         proposal: Option<Value>,
+        expect: Option<Reject>,
+    }
+
+    #[derive(Deserialize)]
+    struct MemberCase {
+        name: String,
+        claimant: String,
+        exclude_members: bool,
+        policy: Option<Value>,
         expect: Option<Reject>,
     }
 
@@ -290,6 +370,16 @@ mod tests {
         let f = fixtures();
         for case in &f.proposal_cases {
             let got = check_proposal(case.proposal.as_ref(), &case.claimant, &f.rules).err();
+            assert_eq!(got, case.expect, "{}", case.name);
+        }
+    }
+
+    #[test]
+    fn member_cases() {
+        let f = fixtures();
+        for case in &f.member_cases {
+            let rules = Rules { exclude_members: case.exclude_members, ..f.rules.clone() };
+            let got = check_claim(Some(&f.member_proposal), case.policy.as_ref(), &case.claimant, &rules).err();
             assert_eq!(got, case.expect, "{}", case.name);
         }
     }
