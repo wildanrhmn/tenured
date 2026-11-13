@@ -160,6 +160,7 @@ Every number comes from `data/mainnet/report.json`, which `npm run reproduce` re
 
 - **Off-chain data is never trusted for money.** The snapshot only helps contributors find their claims and powers the simulator; the contracts re-read every claim on-chain.
 - **Trust is relative.** Payouts count only from DAOs the funding DAO lists. A ring of self-made DAOs earns nothing.
+- **Self-payment can be excluded.** 30.7% of mainnet payouts go to current members of the paying DAO. With `exclude_members`, the contracts read each paying DAO's policy and don't count those (RULES.md rule 9).
 - **A trusted DAO could upgrade its own code to fake history** (Sputnik allows `UpgradeSelf`). NEAR contracts can't read another account's code hash, so this can't be checked on-chain (RULES.md §8).
   - It is bounded by the lane's cap, budget and veto.
   - It is checked off-chain: the CLI and web app compare each DAO's code hash with the versions `sputnik-dao.near` publishes.

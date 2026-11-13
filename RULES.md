@@ -20,6 +20,7 @@ A claim is **valid** for contributor `C` under a funding DAO's config when all o
 | 6 | `token_id` is in the config's `tokens` list (`""` means native NEAR) | Payouts in junk tokens don't count |
 | 7 | `amount >= min_amount` for that token | One-yocto "payouts" don't count |
 | 8 | The same `(dao_id, proposal_id)` appears only once in a request | No double counting |
+| 9 | *Optional* (`exclude_members`): `C` is not in any group role of the paying DAO, read live with `get_policy`. An unreadable policy counts as membership | Councils paying themselves don't build a record. On mainnet, 30.7% of payouts go to current members of the paying DAO. Membership is the DAO's **current** policy, not its policy at the time of the payout |
 
 ## 2. Qualifying
 
@@ -119,6 +120,7 @@ Off-chain data is **never trusted for money**. The contracts re-read every claim
 | Create a ring of DAOs that pay each other | Untrusted DAOs count for nothing (rule 2) |
 | A trusted DAO pays you 1 yocto many times | `min_amount` (rule 7) |
 | Many payouts from one friendly trusted DAO | `min_distinct_daos` |
+| A council pays its own members to farm records | `exclude_members` (rule 9) |
 | Present someone else's payouts | `receiver_id == C` (rule 5) |
 | Repeat the same claim in one request | Rule 8 |
 | Replay a request | `(C, nonce)` is single-use, and each proposal can be registered once |
