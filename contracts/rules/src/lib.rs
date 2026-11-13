@@ -109,12 +109,24 @@ pub fn static_checks(claims: &[Claim], rules: &Rules, factory: &str) -> Vec<Opti
         .collect()
 }
 
+/// Canonical decimal: ASCII digits only, at least one. Sputnik always writes
+/// amounts and timestamps this way; anything else ("+5", " 1", "1e3") comes
+/// from code that isn't Sputnik and is treated as unreadable. Overflowing
+/// the type also fails.
+fn dec_u64(s: &str) -> Option<u64> {
+    (!s.is_empty() && s.bytes().all(|b| b.is_ascii_digit())).then(|| s.parse().ok()).flatten()
+}
+
+fn dec_u128(s: &str) -> Option<u128> {
+    (!s.is_empty() && s.bytes().all(|b| b.is_ascii_digit())).then(|| s.parse().ok()).flatten()
+}
+
 /// Reads the fields we need out of a `get_proposal` JSON response.
 pub fn parse_proposal(v: &Value) -> Option<ProposalView> {
     let proposer = v.get("proposer")?.as_str()?.to_string();
     let status = v.get("status")?.as_str()?.to_string();
     let submission_time_ns = match v.get("submission_time")? {
-        Value::String(s) => s.parse().ok()?,
+        Value::String(s) => dec_u64(s)?,
         Value::Number(n) => n.as_u64()?,
         _ => return None,
     };
@@ -145,8 +157,8 @@ pub fn check_proposal(raw: Option<&Value>, claimant: &str, rules: &Rules) -> Res
         .iter()
         .find(|f| f.token_id == t.token_id)
         .ok_or(Reject::TokenNotCounted)?;
-    let amount: u128 = t.amount.parse().map_err(|_| Reject::Unreadable)?;
-    let min: u128 = floor.min_amount.parse().map_err(|_| Reject::Unreadable)?;
+    let amount = dec_u128(&t.amount).ok_or(Reject::Unreadable)?;
+    let min = dec_u128(&floor.min_amount).ok_or(Reject::Unreadable)?;
     if amount < min {
         return Err(Reject::BelowFloor);
     }
@@ -391,6 +403,49 @@ mod tests {
             let valid: Vec<&Claim> = case.valid.iter().collect();
             assert_eq!(summarize(&valid, &f.rules), case.expect, "{}", case.name);
         }
+    }
+
+    /// fixtures/random-claims.json: thousands of random and malformed inputs
+    /// with the TypeScript verdicts (offchain/src/fuzz.ts). Any disagreement
+    /// between the contracts and the offchain tools fails here.
+    #[test]
+    fn agrees_with_typescript_on_random_inputs() {
+        #[derive(Deserialize)]
+        struct Random {
+            factory: String,
+            claimant: String,
+            rules: Rules,
+            cases: Vec<RandomCase>,
+            statics: Vec<RandomStatic>,
+        }
+        #[derive(Deserialize)]
+        struct RandomCase {
+            proposal: Option<Value>,
+            policy: Option<Value>,
+            exclude_members: bool,
+            expect: Option<Reject>,
+        }
+        #[derive(Deserialize)]
+        struct RandomStatic {
+            claims: Vec<Claim>,
+            expect: Vec<Option<Reject>>,
+        }
+        let f: Random = serde_json::from_str(include_str!("../../../fixtures/random-claims.json")).unwrap();
+        let mut mismatches = vec![];
+        for (i, c) in f.cases.iter().enumerate() {
+            let rules = Rules { exclude_members: c.exclude_members, ..f.rules.clone() };
+            let got = check_claim(c.proposal.as_ref(), c.policy.as_ref(), &f.claimant, &rules).err();
+            if got != c.expect {
+                mismatches.push(format!("case {i}: rust {got:?}, ts {:?}: {}", c.expect, c.proposal.as_ref().map(|p| p.to_string()).unwrap_or_default()));
+            }
+        }
+        for (i, c) in f.statics.iter().enumerate() {
+            let got = static_checks(&c.claims, &f.rules, &f.factory);
+            if got != c.expect {
+                mismatches.push(format!("static {i}: rust {got:?}, ts {:?}", c.expect));
+            }
+        }
+        assert!(mismatches.is_empty(), "{} mismatches:\n{}", mismatches.len(), mismatches.iter().take(15).cloned().collect::<Vec<_>>().join("\n"));
     }
 
     #[test]

@@ -45,13 +45,18 @@ export function staticChecks(claims: Claim[], rules: Rules, factory: string): (R
   });
 }
 
-const isDecimal = (s: unknown): s is string => typeof s === "string" && /^[0-9]+$/.test(s);
+// Canonical decimal, as Sputnik writes them: digits only and within the
+// Rust type's range (u64 timestamps, u128 amounts). Matches dec_u64/dec_u128
+// in contracts/rules.
+const U64_MAX = 2n ** 64n - 1n;
+const U128_MAX = 2n ** 128n - 1n;
+const isDecimal = (s: unknown, max = U128_MAX): s is string => typeof s === "string" && /^[0-9]+$/.test(s) && BigInt(s) <= max;
 
 export function checkProposal(raw: unknown, claimant: string, rules: Rules): Reject | null {
   if (raw === undefined || raw === null) return "NotFound";
   const p = raw as Record<string, unknown>;
   const t = p.submission_time;
-  const timeOk = isDecimal(t) || (typeof t === "number" && Number.isInteger(t) && t >= 0);
+  const timeOk = isDecimal(t, U64_MAX) || (typeof t === "number" && Number.isSafeInteger(t) && t >= 0);
   if (typeof p.proposer !== "string" || typeof p.status !== "string" || !timeOk) return "Unreadable";
   if (p.status !== "Approved") return "NotApproved";
   const kind = p.kind as Record<string, unknown> | string | undefined;
