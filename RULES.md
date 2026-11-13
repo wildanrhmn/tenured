@@ -99,7 +99,7 @@ The lane never votes on an expired proposal. In Sputnik, a vote that lands after
 - votes on a proposal that wasn't registered and checked as above. Its `transfer:VoteApprove` permission would otherwise let it approve any transfer in the DAO, so this is tested explicitly.
 - votes on a proposal that is about to expire.
 - holds funds.
-- has a full-access key after deployment.
+- has a full-access key once it is locked. Deleting the key is the last deployment step: after it, nobody (including us) can change the lane's code or move anything from it, and only the DAO can change its config. *The testnet demo lane keeps its key until the final deploy before submission, so fixes can still be shipped.*
 - changes its own config. Only the DAO can, through a proposal.
 
 **Worst case.** If every check failed at once, the most the lane can move is `period_budget` per period, every request is visible as an ordinary proposal during its veto window, and the DAO can remove the role with one proposal.
@@ -149,7 +149,7 @@ Off-chain data is **never trusted for money**. The contracts re-read every claim
 | Change the amount after registering | Sputnik proposals are immutable; the lane checks the exact amount |
 | Many qualifying accounts drain the lane | `period_budget` per period, debited before the call |
 | A colluding member of a trusted DAO | Bounded by `per_account_cap`, `period_budget` and the veto window |
-| A bug makes the lane approve other proposals | It only votes on proposals registered and checked field by field; tested; no full-access key |
+| A bug makes the lane approve other proposals | It only votes on proposals registered and checked field by field; tested; no full-access key once locked |
 | Stale or forged off-chain data | The contracts re-read every claim on-chain |
 | A trusted DAO upgrades itself to code that fakes `get_proposal` | Not preventable on-chain (§8). Bounded by `per_account_cap`, `period_budget` and the veto window; flagged off-chain before anyone trusts the DAO |
 
