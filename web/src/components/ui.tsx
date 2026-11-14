@@ -149,6 +149,21 @@ export function Gate<T>({ load, what, children }: { load: Loadable<T>; what: str
   return <>{children(load.value)}</>;
 }
 
+/** RULES.md rule 9, as a checkbox. */
+export function ExcludeMembers({ id, checked, onChange }: { id: string; checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div className="check-field">
+      <input id={id} type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} aria-describedby={`${id}-msg`} />
+      <div>
+        <label htmlFor={id}>Exclude payouts to the paying DAO's own members</label>
+        <p className="field-hint" id={`${id}-msg`}>
+          A council paying itself doesn't build a record. Membership is each DAO's current policy.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 /** Ledger line: label, dotted leader, figure. */
 export function Row({ label, value, note, tone }: { label: ReactNode; value: ReactNode; note?: ReactNode; tone?: "accent" | "veto" | "ok" | "no" }) {
   return (

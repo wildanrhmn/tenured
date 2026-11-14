@@ -895,6 +895,21 @@ input[type="checkbox"] {
   flex: 1;
 }
 
+.check-field {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+.check-field input {
+  margin-top: 3px;
+}
+.check-field label {
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
 .radios {
   display: grid;
   gap: 8px;
