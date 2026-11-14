@@ -3,26 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Tenured</title>
-    <meta
-      name="description"
-      content="Verify on-chain what a contributor has already been paid for by other Sputnik DAOs, and let proven contributors' small payouts pass after a veto window."
-    />
+    <title>Tenured · Your DAO track record, verified on-chain</title>
+    <meta name="description" content="Your DAO track record, verified on-chain. Proven contributors skip the queue." />
+    <meta name="theme-color" content="#F7F7F5" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Tenured" />
+    <meta property="og:title" content="Tenured · Your DAO track record, verified on-chain" />
+    <meta property="og:description" content="Your DAO track record, verified on-chain. Proven contributors skip the queue." />
+    <meta name="twitter:card" content="summary" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Public+Sans:ital,wght@0,400;0,500;0,600;1,400&family=Schibsted+Grotesk:wght@600;700;800&display=swap"
-      rel="stylesheet"
-    />
-    <script>
-      try {
-        var t = localStorage.getItem("tenured-theme");
-        if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
-      } catch (e) {}
-    </script>
   </head>
   <body>
+    <canvas class="fluid" id="fluid" aria-hidden="true"></canvas>
+    <div class="page-veil" aria-hidden="true"></div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
