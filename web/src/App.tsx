@@ -82,17 +82,26 @@ function Nav({ current }: { current: string }) {
   );
 }
 
-function Footer() {
+/** The last call to action points at the simulator, or at your own record from inside it. */
+function Footer({ current }: { current: string }) {
+  const onSim = current === "simulate";
   return (
     <footer className="foot">
       <div className="foot-inner">
         <div className="foot-cta">
-          <h2>
-            Replay your DAO's own history.
-            <span>It runs in your browser, in seconds.</span>
-          </h2>
-          <a className="pill pill-bolt" href={href("simulate")}>
-            Try it on your DAO{" "}
+          {onSim ? (
+            <h2>
+              Been paid by DAOs before?
+              <span>Check what your record is worth.</span>
+            </h2>
+          ) : (
+            <h2>
+              Replay your DAO's own history.
+              <span>It runs in your browser, in seconds.</span>
+            </h2>
+          )}
+          <a className="pill pill-bolt" href={href(onSim ? "check" : "simulate")}>
+            {onSim ? "Check a record" : "Try it on your DAO"}{" "}
             <span className="arrow" aria-hidden="true">
               →
             </span>
@@ -171,7 +180,7 @@ export function App() {
         {route.id === "live" && <Live />}
         {route.id === "install" && <Install />}
       </main>
-      <Footer />
+      <Footer current={route.id} />
     </>
   );
 }
