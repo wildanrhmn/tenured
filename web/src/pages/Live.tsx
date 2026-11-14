@@ -39,7 +39,7 @@ export function Live() {
 
   return (
     <div className="page">
-      <PageHead eyebrow="Testnet" title="The live lane">
+      <PageHead eyebrow="Testnet" title="The live lane." dim="Read from testnet, now.">
         <p>
           The demo from <code>scripts/testnet-setup.sh</code>, read live from testnet with view calls. A fund DAO has
           installed the lane; a contributor with three past payouts from two other DAOs files and registers proposals.

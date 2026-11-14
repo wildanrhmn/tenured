@@ -33,7 +33,7 @@ export function Install() {
 
   return (
     <div className="page">
-      <PageHead eyebrow="Setup" title="Install in your DAO">
+      <PageHead eyebrow="Setup" title="Install in your DAO." dim="One proposal.">
         <p>
           Fill in your lane's limits. This page writes the lane's init arguments, the one policy proposal that gives it the
           <code>fastlane</code> role, and the near CLI commands. Nothing is sent from here: you deploy and propose from

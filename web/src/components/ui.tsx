@@ -2,11 +2,14 @@ import { useId, useState, type InputHTMLAttributes, type ReactNode } from "react
 import { splitDao } from "../lib/format";
 import type { Loadable } from "../lib/useSnapshot";
 
-export function PageHead({ eyebrow, title, children }: { eyebrow: string; title: string; children?: ReactNode }) {
+export function PageHead({ eyebrow, title, dim, children }: { eyebrow: string; title: string; dim?: string; children?: ReactNode }) {
   return (
     <header className="page-head">
       <p className="eyebrow">{eyebrow}</p>
-      <h1>{title}</h1>
+      <h1>
+        {title}
+        {dim && <span> {dim}</span>}
+      </h1>
       {children && <div className="lede">{children}</div>}
     </header>
   );

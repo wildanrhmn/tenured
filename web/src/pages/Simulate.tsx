@@ -13,7 +13,7 @@ export function Simulate({ initialDao }: { initialDao: string }) {
   const snap = useSnapshot();
   return (
     <div className="page">
-      <PageHead eyebrow="Simulator" title="Try it on your DAO">
+      <PageHead eyebrow="Simulator" title="Try it on your DAO." dim="Replay its real history.">
         <p>
           Replay a DAO's real payout history as if the fast lane had been installed, using only the record each
           contributor could have presented at the time. Results are totals for the DAO; no one is listed.

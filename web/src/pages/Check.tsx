@@ -28,7 +28,7 @@ export function Check({ initialAccount }: { initialAccount: string }) {
   const snap = useSnapshot();
   return (
     <div className="page">
-      <PageHead eyebrow="Claims" title="Check a record">
+      <PageHead eyebrow="Claims" title="Check a record." dim="Present your own.">
         <p>
           Present your own record. Enter your NEAR account to see which of your past payouts a funding DAO would accept as
           claims, then verify each one live against the paying DAO's own proposal on mainnet.
