@@ -2,7 +2,8 @@
   "name": "tenured",
   "private": true,
   "workspaces": [
-    "offchain"
+    "offchain",
+    "web"
   ],
   "scripts": {
     "crawl": "npm run crawl -w offchain",
@@ -11,6 +12,8 @@
     "reproduce": "npm run reproduce -w offchain",
     "cli": "npm run cli -w offchain --",
     "judge": "npm run judge -w offchain --",
-    "mcp": "npm run mcp -w offchain"
+    "mcp": "npm run mcp -w offchain",
+    "web:dev": "npm run dev -w web",
+    "web:build": "npm run build -w web"
   }
 }
