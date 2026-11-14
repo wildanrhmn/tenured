@@ -2,9 +2,8 @@
 // lane had been installed, using only what each contributor could have
 // claimed at the time. Aggregates only; no per-person output (RULES.md §5).
 
-import type { Payout } from "./payouts.js";
 import { summarize, type Claim, type Rules, type TokenFloor } from "./rules.js";
-import type { Snapshot } from "./snapshot.js";
+import type { Payout, Snapshot } from "./types.js";
 
 /// The lane takes at most this many claims per registration.
 export const MAX_CLAIMS = 9;

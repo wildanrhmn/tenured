@@ -52,7 +52,7 @@ export class RpcPool {
         finality: "final",
         account_id: accountId,
         method_name: method,
-        args_base64: Buffer.from(JSON.stringify(args)).toString("base64"),
+        args_base64: toBase64(new TextEncoder().encode(JSON.stringify(args))),
       },
     });
 
@@ -75,7 +75,7 @@ export class RpcPool {
         const json = JSON.parse(text);
         const result = json?.result;
         if (result && Array.isArray(result.result)) {
-          return JSON.parse(Buffer.from(result.result).toString("utf8")) as T;
+          return JSON.parse(new TextDecoder().decode(Uint8Array.from(result.result as number[]))) as T;
         }
         // Contract-level failures come back either as result.error or as a
         // top-level error with a cause; neither is worth retrying.
@@ -153,3 +153,10 @@ export class RpcPool {
 }
 
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Runs in Node and in browsers, so no Buffer.
+export function toBase64(bytes: Uint8Array): string {
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin);
+}

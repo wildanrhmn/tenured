@@ -9,39 +9,16 @@ import { readdir, readFile, writeFile, mkdir } from "node:fs/promises";
 import { existsSync, readFileSync } from "node:fs";
 import { gzipSync, gunzipSync } from "node:zlib";
 import path from "node:path";
-import { extractPayouts, type BulkList, type Opaque, type Payout } from "./payouts.js";
+import { extractPayouts, type BulkList } from "./payouts.js";
 import { MAINNET_FACTORY, NO_CODE_HASH, type ContractMetadata, type Policy } from "./sputnik.js";
 import type { CachedDao } from "./crawl.js";
+import type { Snapshot } from "./types.js";
+
+export type { DaoInfo, Snapshot } from "./types.js";
 
 const ROOT = path.resolve(import.meta.dirname, "../..");
 const CACHE = path.join(ROOT, ".cache/mainnet");
 export const SNAPSHOT = path.join(ROOT, "data/mainnet/snapshot.json.gz");
-
-export type DaoInfo = {
-  dao: string;
-  proposals: number;
-  code_hash: string | null;
-  // Sputnik version if the code is one the factory published, "none" if the
-  // account has no contract, null if it runs something else.
-  code_version: string | null;
-  proposal_bond: string | null;
-  proposal_period_ns: string | null;
-  // Members of Group roles, by role name. Used to spot self-dealing.
-  groups: Record<string, string[]>;
-  error?: string;
-};
-
-export type Snapshot = {
-  version: 1;
-  network: "mainnet";
-  factory: string;
-  crawled_from: string;
-  crawled_to: string;
-  factory_versions: { code_hash: string; version: string; commit_id: string }[];
-  daos: DaoInfo[];
-  payouts: Payout[];
-  opaque: Opaque[];
-};
 
 function groups(policy: Policy | null): Record<string, string[]> {
   const out: Record<string, string[]> = {};
