@@ -38,12 +38,12 @@ npm ci
 npm run judge
 ```
 
-You should see 7 checks marked `[ok]`, ending with `judge: 7 checks, 0 failed`:
+You should see 8 checks marked `[ok]`, ending with `judge: 8 checks, 0 failed`:
 
 - the published numbers reproduce from the committed snapshot
 - the TypeScript and Rust rule implementations agree on the shared fixtures
 - sampled snapshot payouts are identical to what mainnet returns right now
-- on testnet, the lane is a DAO role with exactly one permission, and the demo contributor's record verifies against the DAOs
+- on testnet, the lane is a DAO role with exactly one permission, the lane account is locked (no full-access keys), and the demo contributor's record verifies against the DAOs
 
 `npm run judge -- --offline` runs only the offline checks.
 
@@ -110,9 +110,10 @@ Transactions from the demo run against the current code:
 | An account presenting someone else's payouts is refused | [`QyYsnaj5…`](https://testnet.nearblocks.io/txns/QyYsnaj51SaPct2YDqNtZQjMC1Q4TjJnBqe4VXevE3m) |
 | The DAO changes the lane's config through an ordinary proposal | [`kfgHt7RJ…`](https://testnet.nearblocks.io/txns/kfgHt7RJekFWVUkJwuJZQ1YwX9tQSjEbLEqr2cqAc8c) |
 | Anyone else calling `configure` is rejected | [`soSzfHYV…`](https://testnet.nearblocks.io/txns/soSzfHYVAqzeVzGPr9jABhKhZZa7dYQHpJnrekpVkfX) |
+| The lane is locked: its last full-access key is deleted, so its code can never change |  [`G1FKGXx4…`](https://testnet.nearblocks.io/txns/G1FKGXx4xiGiB9k45gRXHeyRxKZjRGMZGmdvek1VEhxv) |
 | A registration without the storage deposit is rejected | [`4oHmVpfC…`](https://testnet.nearblocks.io/txns/4oHmVpfCRXTtA9bBJaPZrXQz7z8AmaMkQhcSh22oSbqh) |
 
-To run the whole thing yourself on testnet with free faucet accounts, read [`scripts/testnet-setup.sh`](scripts/testnet-setup.sh) and [`scripts/testnet-demo.sh`](scripts/testnet-demo.sh); `PREFIX=yourname` gives you your own copies.
+To run the whole thing yourself on testnet with free faucet accounts, read [`scripts/testnet-setup.sh`](scripts/testnet-setup.sh), [`scripts/testnet-demo.sh`](scripts/testnet-demo.sh) and, once you're done changing code, [`scripts/testnet-lock.sh`](scripts/testnet-lock.sh); `PREFIX=yourname` gives you your own copies.
 
 ### 6. Use it from an AI agent (MCP)
 
