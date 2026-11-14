@@ -27,8 +27,8 @@
   --bolt-hover: #FFD04D;
   --bolt-soft: rgb(255 194 26 / .18);
   --bolt-ink: #7A5200; /* bolt-coloured text on white, 6.4:1 */
-  --ok: #15803D;
-  --ok-soft: rgb(21 128 61 / .08);
+  --ok: #166534;
+  --ok-soft: rgb(22 101 52 / .08);
   --bad: #B42318;
   --bad-soft: rgb(180 35 24 / .07);
   --vote: #CBCFD6;
@@ -355,7 +355,7 @@ textarea { font: 400 13px/1.5 var(--mono); resize: vertical; }
 select { appearance: none; -webkit-appearance: none; padding-right: 36px; background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%230A0A0B' stroke-opacity='.6' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 14px center; }
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgb(67 56 202 / .14); }
 input[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--bad); }
-input::placeholder, textarea::placeholder { color: rgb(10 10 11 / .38); }
+input::placeholder, textarea::placeholder { color: rgb(10 10 11 / .52); }
 input:disabled { opacity: .5; }
 input[type="radio"], input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
 .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
