@@ -131,6 +131,26 @@ AI agents increasingly do paid work for DAOs. `offchain/src/mcp.ts` is an MCP se
 
 The server never holds keys. The agent signs the plan with its own wallet, for example through [nearai/near-mcp](https://github.com/nearai/near-mcp). `npm test` includes a test that drives the server over stdio.
 
+### 7. Use the web app
+
+```sh
+npm ci
+npm run web:dev       # http://localhost:5173
+npm run web:build     # static site in web/dist
+```
+
+The app imports the same rules engine as the CLI from `offchain/src` and loads `data/mainnet/snapshot.json.gz` in the browser. It needs no backend and no keys.
+
+| Page | What it does |
+| --- | --- |
+| Overview | The idea, the mainnet numbers from `report.json`, and the steps of a fast-lane payout |
+| Try it on your DAO | The simulator on any crawled DAO: pick the pay token, caps, budget, bar and trusted DAOs, and optionally exclude payouts to members. Totals and a per-period chart only |
+| Check a record | Finds an account's claims in the snapshot, then verifies each one live on mainnet with the verifier's rules, and shows each paying DAO's code version with any warning |
+| Live lane | Reads the testnet lane, its config and requests (with veto and expiry countdowns), and the fund DAO's policy. Copyable near CLI commands for each step of the demo |
+| Install | A form that writes the lane's init arguments, the `fastlane` role proposal and the near CLI commands, checked against the lane's `validate()` |
+
+To host it under a sub-path, for example on GitHub Pages, build with `VITE_BASE=/repo-name/ npm run web:build`.
+
 ## How it works
 
 ```
