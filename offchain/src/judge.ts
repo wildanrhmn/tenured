@@ -84,6 +84,23 @@ check("testnet: the lane is a role with exactly one permission", async () => {
   return `${DEPLOYMENT.fund} role "${r.name}" = [${r.permissions.join(", ")}]`;
 });
 
+check("testnet: the lane is locked (no full-access keys)", async () => {
+  const res = await fetch(TESTNET_RPCS[0]!, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: "judge",
+      method: "query",
+      params: { request_type: "view_access_key_list", finality: "final", account_id: DEPLOYMENT.lane },
+    }),
+  });
+  const keys: { access_key: { permission: unknown } }[] = (await res.json()).result.keys;
+  const full = keys.filter((k) => k.access_key.permission === "FullAccess").length;
+  if (full) throw new Error(`${full} full-access key(s) remain`);
+  return `${DEPLOYMENT.lane} has ${keys.length} key(s), none full-access: its code can never change`;
+});
+
 check("testnet: the lane's DAO and config", async () => {
   const rpc = new RpcPool(TESTNET_RPCS);
   const dao = await rpc.view<string>(DEPLOYMENT.lane, "get_dao");
