@@ -2,9 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { DaoPicker } from "../components/DaoPicker";
 import { PeriodChart } from "../components/PeriodChart";
 import { DaoName, ExcludeMembers, Field, Gate, PageHead, Row, TextInput, TrustedList } from "../components/ui";
-import { TOKENS, defaultRules, simulate, suggestTrusted, type SimConfig, type SimResult } from "../engine";
+import { TOKENS, defaultRules, suggestTrusted, type SimConfig, type SimResult } from "../engine";
 import { TOKEN_LABELS, fmtAmount, fmtInt, fmtPct, tokenKeyById, tokenSymbol, tryUnits } from "../lib/format";
 import { href } from "../lib/router";
+import { runSimulation } from "../lib/sim";
 import type { SnapshotIndex } from "../lib/snapshot";
 import { useSnapshot } from "../lib/useSnapshot";
 
@@ -90,12 +91,17 @@ function SimulateBody({ idx, initialDao }: { idx: SnapshotIndex; initialDao: str
   const [result, setResult] = useState<{ key: string; r: SimResult; ms: number } | null>(null);
   useEffect(() => {
     if (!cfg) return;
+    let live = true;
     const timer = setTimeout(() => {
-      const t0 = performance.now();
-      const r = simulate(idx.snap, cfg);
-      setResult({ key, r, ms: performance.now() - t0 });
-    }, 200);
-    return () => clearTimeout(timer);
+      runSimulation(idx, cfg).then(
+        (o) => live && setResult({ key, ...o }),
+        () => live && setResult(null),
+      );
+    }, 150);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
     // The key captures every input of cfg.
   }, [key]);
 
