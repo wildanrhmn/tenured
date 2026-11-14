@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { PeriodRow } from "../engine";
 import { fmtAmount, fmtInt } from "../lib/format";
 
@@ -18,9 +18,19 @@ function niceMax(v: number): number {
  */
 export function PeriodChart({ rows, decimals, symbol }: { rows: PeriodRow[]; decimals: number; symbol: string }) {
   const [hover, setHover] = useState<number | null>(null);
+  const [box, setBox] = useState(560);
+  const scroller = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([e]) => e && setBox(Math.floor(e.contentRect.width)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   if (rows.length === 0) return null;
 
-  const W = Math.max(560, rows.length * 14 + PAD.left + PAD.right);
+  // Fill the card; scroll sideways only when bars would get thinner than ~10px.
+  const W = Math.max(box, rows.length * 12 + PAD.left + PAD.right);
   const max = niceMax(Math.max(...rows.map((r) => r.payouts)));
   const innerW = W - PAD.left - PAD.right;
   const innerH = H - PAD.top - PAD.bottom;
@@ -41,7 +51,7 @@ export function PeriodChart({ rows, decimals, symbol }: { rows: PeriodRow[]; dec
           <i className="sw sw-vote" /> Still a council vote
         </span>
       </div>
-      <div className="chart-scroll">
+      <div className="chart-scroll" ref={scroller}>
         <svg
           viewBox={`0 0 ${W} ${H}`}
           width={W}

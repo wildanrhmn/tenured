@@ -100,6 +100,13 @@ body {
   color: var(--ink);
   font: 400 16px/1.55 var(--sans);
   -webkit-font-smoothing: antialiased;
+}
+
+table,
+.chart,
+.req-id,
+.countdown,
+.combo-count {
   font-variant-numeric: tabular-nums;
 }
 
@@ -153,7 +160,8 @@ code {
 .skip {
   position: absolute;
   left: 12px;
-  top: -40px;
+  top: 12px;
+  transform: translateY(-200%);
   background: var(--accent);
   color: var(--accent-ink);
   padding: 8px 12px;
@@ -161,7 +169,7 @@ code {
   z-index: 10;
 }
 .skip:focus {
-  top: 12px;
+  transform: none;
 }
 
 .muted {
@@ -623,10 +631,12 @@ main {
   margin-top: auto;
 }
 .flow-step.is-veto {
-  background: repeating-linear-gradient(135deg, var(--veto-soft) 0 8px, transparent 8px 14px);
+  background:
+    repeating-linear-gradient(135deg, var(--veto-fill) 0 2px, transparent 2px 7px) bottom / 100% 6px no-repeat,
+    var(--veto-soft);
   border-radius: 8px;
   padding: 0 12px 12px;
-  margin: -0px 12px 0 -4px;
+  margin: 0 12px 0 -4px;
 }
 .flow-step.is-veto .flow-n {
   border-color: var(--veto-fill);
@@ -823,6 +833,7 @@ legend {
 }
 
 .field {
+  align-content: start;
   display: grid;
   gap: 5px;
   min-width: 0;
@@ -1356,7 +1367,9 @@ thead th {
 .copy pre {
   margin: 0;
   padding: 12px;
-  overflow-x: auto;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   font-size: 0.75rem;
   line-height: 1.6;
   max-height: 340px;
