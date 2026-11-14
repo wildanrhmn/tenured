@@ -22,6 +22,11 @@
   if (matchMedia("(max-width: 760px)").matches) return;
   const gl = !reduce && canvas.getContext("webgl2", { alpha: false, antialias: false, depth: false, stencil: false, preserveDrawingBuffer: false });
   if (!gl || !gl.getExtension("EXT_color_buffer_float")) { hero?.classList.add("no-fluid"); return; }
+  // On a software renderer the solver eats the main thread and starves the app's own
+  // network reads (the live lane page stalled), so those machines get the still glow.
+  const info = gl.getExtension("WEBGL_debug_renderer_info");
+  const renderer = info ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : "";
+  if (/swiftshader|llvmpipe|softpipe|software/i.test(renderer)) return;
 
   // Katana's settings, kept as-is.
   const CFG = {
