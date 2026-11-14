@@ -6,7 +6,7 @@
     "web"
   ],
   "scripts": {
-    "crawl": "npm run crawl -w offchain",
+    "crawl": "npm run crawl -w offchain --",
     "snapshot": "npm run snapshot -w offchain",
     "test": "npm test -w offchain",
     "reproduce": "npm run reproduce -w offchain",
