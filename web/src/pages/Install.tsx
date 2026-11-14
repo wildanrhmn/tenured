@@ -201,9 +201,9 @@ export function Install() {
                 <strong>Fill in the highlighted fields to generate the install.</strong>
               </p>
               <p className="muted">
-                The checks match the lane contract's own: a positive period and proposal age, a cap no larger than the
-                budget, at least one trusted DAO and one counted token. A few more catch settings that would never pay
-                anyone.
+                The checks match the lane contract's own: a period of up to 10 years, a proposal age of up to a year, a
+                veto window of up to 30 days, a cap no larger than the budget, at least one trusted DAO and one counted
+                token, and a bar of at least one DAO and one payout. A few more catch settings that would never pay anyone.
               </p>
             </div>
           ) : (
