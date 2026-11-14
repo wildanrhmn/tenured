@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Wordmark } from "./components/Brand";
 import { ROUTES, href, useRoute } from "./lib/router";
 import { Overview } from "./pages/Overview";
 import { Simulate } from "./pages/Simulate";
@@ -6,75 +7,163 @@ import { Check } from "./pages/Check";
 import { Live } from "./pages/Live";
 import { Install } from "./pages/Install";
 
-type Theme = "system" | "light" | "dark";
+export const REPO = "https://github.com/wildanrhmn/tenured";
 
-function useTheme(): [Theme, (t: Theme) => void] {
-  const [theme, setTheme] = useState<Theme>(() => {
-    const t = document.documentElement.dataset.theme;
-    return t === "light" || t === "dark" ? t : "system";
-  });
+/** Floating capsule nav: logo left, links in the middle, one action right; a sheet on phones. */
+function Nav({ current }: { current: string }) {
+  const [open, setOpen] = useState(false);
+  const burger = useRef<HTMLButtonElement>(null);
+
   useEffect(() => {
-    const root = document.documentElement;
-    if (theme === "system") delete root.dataset.theme;
-    else root.dataset.theme = theme;
-    try {
-      if (theme === "system") localStorage.removeItem("tenured-theme");
-      else localStorage.setItem("tenured-theme", theme);
-    } catch {
-      /* storage can be blocked; the choice just won't persist */
-    }
-  }, [theme]);
-  return [theme, setTheme];
+    document.documentElement.classList.toggle("menu-open", open);
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setOpen(false);
+        burger.current?.focus();
+      }
+    };
+    const wide = matchMedia("(min-width: 961px)");
+    const onWide = () => wide.matches && setOpen(false);
+    document.addEventListener("keydown", onKey);
+    wide.addEventListener("change", onWide);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      wide.removeEventListener("change", onWide);
+    };
+  }, [open]);
+
+  useEffect(() => setOpen(false), [current]);
+
+  return (
+    <>
+      <header className={open ? "nav open" : "nav"}>
+        <div className="nav-in">
+          <a className="brand" href={href("overview")} aria-label="Tenured, overview">
+            <Wordmark />
+          </a>
+          <nav className="nav-links" id="nav-menu" aria-label="Primary">
+            {ROUTES.map((r) => (
+              <a key={r.id} href={href(r.id)} aria-current={current === r.id ? "page" : undefined} onClick={() => setOpen(false)}>
+                {r.label}
+              </a>
+            ))}
+            <a className="ext" href={REPO} target="_blank" rel="noreferrer">
+              Docs
+            </a>
+            <a className="nav-cta-menu" href={href("simulate")} onClick={() => setOpen(false)}>
+              Try it on your DAO
+            </a>
+          </nav>
+          <div className="nav-end">
+            <a className="nav-cta" href={href("simulate")} aria-current={current === "simulate" ? "page" : undefined}>
+              Try it on your DAO{" "}
+              <span className="arrow" aria-hidden="true">
+                →
+              </span>
+            </a>
+            <button
+              ref={burger}
+              className="burger"
+              type="button"
+              aria-expanded={open}
+              aria-controls="nav-menu"
+              aria-label={open ? "Close menu" : "Open menu"}
+              onClick={() => setOpen((o) => !o)}
+            >
+              <span />
+              <span />
+            </button>
+          </div>
+        </div>
+      </header>
+      <div className="nav-scrim" aria-hidden="true" onClick={() => setOpen(false)} />
+    </>
+  );
 }
 
-function Mark() {
+function Footer() {
   return (
-    <svg className="mark" viewBox="0 0 32 32" aria-hidden="true">
-      <rect x="4" y="18" width="4" height="10" rx="1.2" />
-      <rect x="11" y="13" width="4" height="15" rx="1.2" />
-      <rect x="18" y="8" width="4" height="20" rx="1.2" />
-      <rect className="mark-last" x="25" y="4" width="4" height="24" rx="1.2" />
-    </svg>
+    <footer className="foot">
+      <div className="foot-inner">
+        <div className="foot-cta">
+          <h2>
+            Replay your DAO's own history.
+            <span>It runs in your browser, in seconds.</span>
+          </h2>
+          <a className="pill pill-bolt" href={href("simulate")}>
+            Try it on your DAO{" "}
+            <span className="arrow" aria-hidden="true">
+              →
+            </span>
+          </a>
+        </div>
+        <div className="foot-cols">
+          <div className="foot-brand">
+            <a className="brand" href={href("overview")} aria-label="Tenured, overview">
+              <Wordmark />
+            </a>
+            <p>Your DAO track record, verified on-chain. Proven contributors skip the queue.</p>
+          </div>
+          <nav className="foot-nav" aria-label="Footer">
+            <div>
+              <p>Product</p>
+              <a href={href("simulate")}>Simulator</a>
+              <a href={href("check")}>Check a record</a>
+              <a href={href("live")}>Live lane</a>
+              <a href={href("install")}>Install</a>
+            </div>
+            <div>
+              <p>Source</p>
+              <a href={REPO} target="_blank" rel="noreferrer">
+                GitHub
+              </a>
+              <a href={`${REPO}/blob/main/RULES.md`} target="_blank" rel="noreferrer">
+                Rules
+              </a>
+              <a href={`${REPO}/blob/main/LICENSE`} target="_blank" rel="noreferrer">
+                MIT license
+              </a>
+            </div>
+            <div>
+              <p>Built on</p>
+              <a href="https://near.org" target="_blank" rel="noreferrer">
+                NEAR
+              </a>
+              <a href="https://github.com/near-daos/sputnik-dao-contract" target="_blank" rel="noreferrer">
+                Sputnik DAO
+              </a>
+            </div>
+          </nav>
+        </div>
+        <div className="foot-base">
+          <span>Built for the NEAR hackathon, November 2026</span>
+          <span className="mono">snapshot is never used for money · contracts re-read every claim</span>
+        </div>
+      </div>
+      <div className="foot-mark" aria-hidden="true">
+        <span>Tenured</span>
+      </div>
+    </footer>
   );
 }
 
 export function App() {
   const route = useRoute();
-  const [theme, setTheme] = useTheme();
-  const next: Record<Theme, Theme> = { system: "light", light: "dark", dark: "system" };
-
   return (
     <>
-      <a className="skip" href="#main">
+      {/* Hash routing owns the URL fragment, so the skip link moves focus itself. */}
+      <a
+        className="skip"
+        href="#main"
+        onClick={(e) => {
+          e.preventDefault();
+          document.getElementById("main")?.focus();
+        }}
+      >
         Skip to content
       </a>
-      <header className="top">
-        <div className="top-inner">
-          <a className="brand" href={href("overview")}>
-            <Mark />
-            <span>Tenured</span>
-          </a>
-          <button
-            type="button"
-            className="theme"
-            onClick={() => setTheme(next[theme])}
-            aria-label={`Colour theme: ${theme}. Switch to ${next[theme]}.`}
-            title={`Theme: ${theme}`}
-          >
-            <span aria-hidden="true" className={`theme-dot theme-${theme}`} />
-            <span className="theme-label">{theme === "system" ? "Auto" : theme === "light" ? "Light" : "Dark"}</span>
-          </button>
-        </div>
-        <nav className="tabs" aria-label="Sections">
-          <div className="tabs-inner">
-            {ROUTES.map((r) => (
-              <a key={r.id} href={href(r.id)} aria-current={route.id === r.id ? "page" : undefined}>
-                {r.label}
-              </a>
-            ))}
-          </div>
-        </nav>
-      </header>
+      <Nav current={route.id} />
       <main id="main" tabIndex={-1}>
         {route.id === "overview" && <Overview />}
         {route.id === "simulate" && <Simulate initialDao={route.param} />}
@@ -82,13 +171,7 @@ export function App() {
         {route.id === "live" && <Live />}
         {route.id === "install" && <Install />}
       </main>
-      <footer className="foot">
-        <p>
-          Tenured reads Sputnik DAO proposals on NEAR. Off-chain numbers come from a snapshot of mainnet and are never
-          used for money: the contracts re-read every claim on-chain.
-        </p>
-        <p>MIT licensed. Built for the NEAR hackathon, November 2026.</p>
-      </footer>
+      <Footer />
     </>
   );
 }

@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 // Hash routes, so the app works from any static host and sub-path.
 export const ROUTES = [
   { id: "overview", label: "Overview" },
-  { id: "simulate", label: "Try it on your DAO" },
+  { id: "simulate", label: "Simulator" },
   { id: "check", label: "Check a record" },
   { id: "live", label: "Live lane" },
   { id: "install", label: "Install" },
