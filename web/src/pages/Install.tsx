@@ -24,7 +24,9 @@ export function Install() {
   const info = f.network === "mainnet" && idx ? idx.info.get(daoId) : undefined;
   const facts: DaoFacts | null = info ? { proposal_bond: info.proposal_bond, proposal_period_ns: info.proposal_period_ns } : null;
   const checked = validateInstall(f, facts);
-  const e = checked.errors;
+  // A blank form isn't wrong yet: show field errors once the accounts are being filled in.
+  const started = [f.dao, f.lane, f.trusted].some((v) => v.trim() !== "");
+  const e = started ? checked.errors : {};
   const cmds = checked.init ? installCommands(checked.init, f.lane.trim().toLowerCase(), f.network, f.proposer.trim().toLowerCase(), facts) : null;
   const sym = tokenSymbol(f.payToken);
   const factory = factoryFor(f.network);
