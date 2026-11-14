@@ -2,7 +2,15 @@
 
 export type Report = {
   snapshot: { crawled_from: string; crawled_to: string; factory: string };
-  daos: { total: number; with_any_proposal: number; with_any_payout: number; crawl_errors: number };
+  daos: {
+    total: number;
+    with_any_proposal: number;
+    with_any_payout: number;
+    /** Factory DAOs that no longer answer get_proposal. */
+    unreadable: number;
+    /** Sputnik version, or "custom" for code the factory never published. */
+    by_code_version: Record<string, number>;
+  };
   payouts: {
     total: number;
     by_path: Record<"transfer" | "bounty" | "ft_transfer" | "intents" | "bulk", number>;
