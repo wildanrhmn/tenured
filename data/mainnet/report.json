@@ -1,44 +1,44 @@
 {
   "snapshot": {
-    "crawled_from": "2026-11-10T08:31:15.765Z",
-    "crawled_to": "2026-11-10T08:55:02.119Z",
+    "crawled_from": "2026-11-14T12:26:16.268Z",
+    "crawled_to": "2026-11-14T12:49:33.144Z",
     "factory": "sputnik-dao.near"
   },
   "daos": {
-    "total": 2115,
-    "with_any_proposal": 1651,
-    "with_any_payout": 711,
+    "total": 2199,
+    "with_any_proposal": 1701,
+    "with_any_payout": 726,
     "unreadable": 10,
     "by_code_version": {
       "2.0": 457,
       "3.0": 727,
       "3.1": 144,
-      "3.2": 778,
+      "3.2": 862,
       "custom": 9
     }
   },
   "payouts": {
-    "total": 33126,
+    "total": 33178,
     "by_path": {
-      "transfer": 31015,
+      "transfer": 31050,
       "bounty": 381,
-      "ft_transfer": 754,
-      "intents": 644,
+      "ft_transfer": 765,
+      "intents": 650,
       "bulk": 332
     },
     "missed_by_a_transfer_only_crawl_pct": 6.4,
     "opaque": {
-      "chain_signature": 2223,
+      "chain_signature": 2368,
       "bulk_list_missing": 1
     },
-    "in_the_last_year": 3139,
+    "in_the_last_year": 3174,
     "to_members_of_the_paying_dao_pct": 30.7,
     "filed_by_the_receiver_pct": 59.7
   },
   "receivers": {
-    "total": 6450,
-    "paid_by_2_or_more_daos": 1073,
-    "paid_by_3_or_more_daos": 489,
-    "claimable_from_2_or_more_daos": 1048
+    "total": 6476,
+    "paid_by_2_or_more_daos": 1075,
+    "paid_by_3_or_more_daos": 491,
+    "claimable_from_2_or_more_daos": 1050
   }
 }

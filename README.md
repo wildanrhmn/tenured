@@ -20,7 +20,7 @@ Other entries in this hackathon build trust tiers *inside* one DAO. Tenured is t
 | --- | --- | --- |
 | `verifier` contract | Given an account and claims `(dao, proposal_id)`, reads each proposal from the paying DAO and checks it was an approved payout to that account, from a DAO the caller trusts, above a floor. Stateless, no admin | `contracts/verifier` |
 | `lane` contract | A Sputnik role member that holds **no funds** and has exactly one permission, `transfer:VoteApprove`. Approves a contributor's own Transfer proposal after checking it field by field, verifying their track record, debiting caps and waiting out a veto window | `contracts/lane` |
-| Mainnet dataset | Every one of the 2,115 DAOs on `sputnik-dao.near`, crawled with free view calls: 33,126 payouts across five payout paths | `data/mainnet` |
+| Mainnet dataset | Every one of the 2,199 DAOs on `sputnik-dao.near`, crawled with free view calls: 33,178 payouts across five payout paths | `data/mainnet` |
 | Simulator | Replays a real DAO's history as if the lane had been installed: how many payouts would have skipped a vote, council votes saved, the most money exposed in any period | `offchain/src/simulate.ts` |
 | CLI | Claim discovery, **live verification against mainnet** with the same rules as the contract, the simulator | `offchain/src/cli.ts` |
 | Web app | All of the above in a browser, plus a live view of the testnet lane and an install wizard | `web/` |
@@ -178,12 +178,12 @@ The worst case is `period_budget` per period, with every request visible during 
 
 Every number comes from `data/mainnet/report.json`, which `npm run reproduce` rebuilds from the committed snapshot.
 
-- **2,115 DAOs** on `sputnik-dao.near`; 1,651 ever made a proposal, 711 ever paid someone.
-- **9 run code the factory never published, and 10 no longer answer `get_proposal`.** The rest run Sputnik v2.0 to v3.2, 778 of them through NEP-591 global contracts. This is why trusted DAOs are checked off-chain (RULES.md §8).
-- **33,126 payouts to 6,450 accounts.**
+- **2,199 DAOs** on `sputnik-dao.near`; 1,701 ever made a proposal, 726 ever paid someone.
+- **9 run code the factory never published, and 10 no longer answer `get_proposal`.** The rest run Sputnik v2.0 to v3.2, 862 of them through NEP-591 global contracts. This is why trusted DAOs are checked off-chain (RULES.md §8).
+- **33,178 payouts to 6,476 accounts.**
   - 6.4% are invisible to a crawl that only reads `Transfer` proposals (bounties, `ft_transfer` calls, NEAR Intents transfers, Trezu bulk lists).
-  - 2,223 more went out through chain signatures, whose recipients can't be read from the proposal. These are reported, not guessed.
-- **1,048 accounts can already present payouts from two or more DAOs**, and 489 were paid by three or more. They qualify on day one, with no sign-up.
+  - 2,368 more went out through chain signatures, whose recipients can't be read from the proposal. These are reported, not guessed.
+- **1,050 accounts can already present payouts from two or more DAOs**, and 491 were paid by three or more. They qualify on day one, with no sign-up.
 - **60% of payouts were filed by the person who got paid.** That is exactly the lane's flow, so it matches how DAOs already work.
 
 ## Security review
