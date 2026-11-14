@@ -16,6 +16,18 @@ jobs:
       - run: npm run typecheck -w offchain
       - run: npm test
 
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run typecheck -w web
+      - run: npm test -w web
+      - run: npm run build -w web
+
   contracts:
     runs-on: ubuntu-latest
     steps:
