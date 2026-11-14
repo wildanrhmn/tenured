@@ -83,6 +83,11 @@ export function simulate(snap: Pick<Snapshot, "payouts"> & Partial<Pick<Snapshot
     .filter((p) => p.dao === cfg.dao && p.path === "transfer" && p.token === cfg.pay_token && /^[0-9]+$/.test(p.amount))
     .sort((a, b) => sec(a) - sec(b) || a.proposal_id - b.proposal_id);
 
+  // Claim discovery only ever looks at one receiver's payouts, so group them
+  // once instead of scanning the whole snapshot for every target.
+  const byReceiver = new Map<string, Payout[]>();
+  for (const p of snap.payouts) (byReceiver.get(p.receiver) ?? byReceiver.set(p.receiver, []).get(p.receiver)!).push(p);
+
   const usedAccount = new Map<string, bigint>();
   const usedPeriod = new Map<number, bigint>();
   const rows = new Map<number, PeriodRow>();
@@ -117,7 +122,7 @@ export function simulate(snap: Pick<Snapshot, "payouts"> & Partial<Pick<Snapshot
 
     // Only history from before this payout counts, and the lane reads at
     // most MAX_CLAIMS of it.
-    const claims = discoverClaims(snap.payouts, p.receiver, cfg.rules, sec(p), members);
+    const claims = discoverClaims(byReceiver.get(p.receiver)!, p.receiver, cfg.rules, sec(p), members);
     if (!summarize(claims, cfg.rules).qualifies) {
       res.not_qualified++;
       continue;
